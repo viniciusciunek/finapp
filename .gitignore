@@ -1,0 +1,72 @@
+# Laravel specific
+api/vendor/
+api/node_modules/
+api/public/hot
+api/public/storage
+api/storage/*.key
+api/.vscode/
+api/.env
+api/.phpunit.result.cache
+
+# Ignore the local Homestead Vagrant environment
+api/Homestead.yaml
+api/Homestead.json
+
+# Ignore IDE specific files
+api/.idea
+api/*.sublime-workspace
+api/*.sublime-project
+api/*.phpstorm.meta.php
+
+# Ignore Composer and NPM lock files
+api/composer.lock
+api/npm-debug.log
+api/yarn-error.log
+
+# Ignore log files and databases
+api/*.log
+api/*.sql
+api/*.sqlite
+
+# Ignore temporary files
+api/*.swp
+api/*.swo
+api/.DS_Store
+api/Thumbs.db
+
+# Ignore build directories
+api/build/
+api/dist/
+
+# frontend -----------------------------------
+# Next.js specific
+frontend/.next/
+frontend/out/
+frontend/node_modules/
+
+# Ignore development server files
+frontend/.npm
+frontend/.yarn
+frontend/.yarn-cache
+
+# Ignore environment files
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+
+# Ignore build artifacts
+frontend/.cache
+frontend/.next
+frontend/.vercel
+
+# Ignore OS generated files
+frontend/.DS_Store
+frontend/Thumbs.db
+
+# Ignore log files
+frontend/*.log
+
+# Ignore temporary files
+frontend/*.swp
+frontend/*.swo
