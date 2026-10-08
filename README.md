@@ -111,7 +111,9 @@ scripts/                 Geração de assets (ícones)
 
 ## Deploy
 
-Pendente (Fatia 0, passo final). O plano é Vercel ligada ao repositório do GitHub, com as mesmas variáveis do `.env.local` configuradas no painel.
+Pendente (passo manual). O plano é **Vercel** ligada ao repositório do GitHub, com as mesmas variáveis do `.env.local` configuradas no painel.
+
+> ⚠️ **Este app não funciona como site estático.** `output: "export"` (GitHub Pages, S3, etc.) é incompatível com **Server Actions**, **cookies**, **proxy** e Image Optimization — recursos que o login e a sessão usam. Testado: o build falha com `Server Actions are not supported with static export`. O deploy precisa de um host com runtime Node (Vercel, Netlify, Cloudflare). Detalhes em [`docs/BUILD_LOG.md`](docs/BUILD_LOG.md), passo `P14`.
 
 ## CI
 

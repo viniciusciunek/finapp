@@ -9,7 +9,7 @@
 ## Status atual
 
 - **Fatia em andamento:** **0 — Fundação** (`docs/ROADMAP.md`) — **código concluído**, faltam os passos manuais abaixo
-- **Último passo concluído:** `P13` — Validação final + commit inicial (`18021bd`)
+- **Último passo concluído:** `P14` — Investigação do export estático (GitHub Pages) e decisão por hospedagem em servidor (Vercel)
 - **Próximo passo:** passos manuais do usuário (abaixo) e depois **Fatia 1 — Login e família** (docs/ROADMAP.md)
 - **Pendências manuais (usuário):**
   - [ ] Informar a URL do repositório GitHub: `git remote add origin <url>` + `git push -u origin main` (o CI só roda depois disso)
@@ -34,6 +34,7 @@
 | D7 | Dinheiro sempre em centavos; primeiro módulo puro do domínio será `src/domain/money.ts` | Regra 1 das instruções + prova o harness do Vitest com código útil de verdade | Teste "hello world" descartável |
 | D8 | shadcn/ui com biblioteca base **Radix** (`radix-ui`), preset `radix-nova` | Radix é a base histórica do shadcn/ui: ecossistema maduro, ampla documentação/exemplos e maior compatibilidade com o grande volume de componentes de terceiros publicados no registry | `base` (Base UI) — biblioteca mais nova, ainda com menos exemplos publicados |
 | D9 | **Toda leitura de sessão/cookies fica atrás de um limite `<Suspense>`** (no caso das rotas atuais, via `loading.tsx`) | Exigência do Cache Components do Next 16: ler `cookies()` fora de um limite `<Suspense>` **quebra o build**. Além disso o shell estático da página carrega instantâneo e só o conteúdo privado espera a requisição | `instant = false` (testado: NÃO resolve o erro de build, só silencia a validação); desligar `cacheComponents` (briga com o padrão do framework) |
+| D10 | Hospedagem em **servidor** (Vercel). **Descartado** `output: "export"` / GitHub Pages | O export estático é **incompatível** com Server Actions, `cookies()`, `proxy` e Image Optimization — ou seja, mataria o login e o logout. Ver `P14` para a evidência dos builds. Além disso, o GitHub Pages publica o site de forma **pública** (Pages privado exige GitHub Enterprise) | Migrar a autenticação para o browser (padrão SPA do Supabase) e usar GitHub Pages — cogitado e recusado pelo usuário |
 
 ---
 
@@ -781,6 +782,47 @@ git commit -m "feat: fundação do projeto (Next.js 16, Supabase Auth, Vitest, C
 
 ---
 
+### P14 — Export estático (GitHub Pages) investigado e descartado · 2026-10-08
+
+**Pedido:** adicionar `output: "export"` ao `next.config.ts` para gerar arquivos estáticos em `out/` e hospedar no GitHub Pages.
+
+**Por que não foi feito direto:** export estático remove o servidor, e este app depende dele em pontos estruturais. Em vez de aplicar a flag e descobrir depois, fiz a checagem em duas frentes — documentação e build de verdade.
+
+**Fonte 1 — documentação embarcada do Next 16** (`node_modules/next/dist/docs/01-app/02-guides/static-exports.md`, seção *Unsupported Features*): recursos que **exigem servidor Node.js** e não são suportados:
+
+- **Cookies** · **Proxy** · **Server Actions** · Redirects · Headers · Rewrites · ISR · Draft Mode · Image Optimization (loader padrão) · Route Handlers que dependem de `Request`
+
+**Fonte 2 — builds executados de verdade** (com o projeto real, não um exemplo):
+
+| # | Configuração testada | Resultado |
+|---|---|---|
+| 1 | `output: "export"` | ❌ `/manifest.webmanifest` exige `export const dynamic = "force-static"` |
+| 2 | + `dynamic = "force-static"` no manifest | ❌ `Route segment config "dynamic" is not compatible with nextConfig.cacheComponents` → obrigaria a desligar `cacheComponents` **e** `partialPrefetching` (PPR precisa de servidor) |
+| 3 | + `cacheComponents`/`partialPrefetching` desligados, `images.unoptimized: true` | ❌ **`Server Actions are not supported with static export.`** |
+
+**O que isso quebraria, em concreto** (tudo construído no `P09`):
+
+| Arquivo | Recurso incompatível |
+|---|---|
+| `src/app/login/actions.ts` | Server Action (login) |
+| `src/app/actions.ts` | Server Action (sair) |
+| `src/lib/supabase/server.ts` | `cookies()` |
+| `src/proxy.ts` | Proxy (renovação da sessão) |
+
+Ou seja: **login e logout param de funcionar** — e o `ROADMAP.md` exige "login funciona" como critério de pronto.
+
+**Alternativa apresentada:** migrar a autenticação para o browser (padrão SPA do Supabase: `signInWithPassword` no cliente, proteção de rota client-side, RLS como barreira de segurança) e então o GitHub Pages funcionaria.
+
+**Decisão do usuário: manter a arquitetura de servidor e publicar na Vercel** (registrada como `D10`).
+
+Observação que pesou na conversa: o **GitHub Pages publica o site de forma pública** — Pages privado exige GitHub Enterprise. Os dados continuam protegidos por login + RLS, mas o app ficaria acessível a qualquer um, e ainda seria necessário configurar `basePath` (a URL vira `usuario.github.io/finapp`).
+
+**Estado final:** nenhuma mudança permanente. Os arquivos usados no teste foram restaurados com `git checkout -- next.config.ts src/app/manifest.ts`, a árvore ficou limpa (`git status` vazio) e o build voltou a passar, com as rotas `◐ /` e `◐ /login` e o `ƒ Proxy (Middleware)`.
+
+**Lição para o futuro:** se em algum momento "hospedagem estática" voltar à mesa, a conversa **não** é sobre uma flag no `next.config.ts` — é sobre reescrever a autenticação para o cliente. Enquanto o login usar Server Actions e sessão em cookie validada no servidor, o deploy precisa de um host com runtime Node (Vercel, Netlify, Cloudflare).
+
+---
+
 ## Resumo da Fatia 0
 
 **Critério do `ROADMAP.md`:** *"deploy no ar, login funciona, `npm test` roda"*.
@@ -791,6 +833,6 @@ git commit -m "feat: fundação do projeto (Next.js 16, Supabase Auth, Vitest, C
 | Login funciona | ✅ código pronto e verificado em runtime (redireciona sem sessão, permite logar com usuário válido); **falta o teste com o usuário real**, que depende das credenciais do Supabase |
 | Deploy no ar | ⏳ **pendente do usuário**: criar o projeto na Vercel e configurar as variáveis |
 
-**Números:** 48 arquivos versionados · 9 decisões registradas · 14 passos documentados · 0 erros de lint/tipo/teste/build.
+**Números:** 48 arquivos versionados · 10 decisões registradas · 15 passos documentados · 0 erros de lint/tipo/teste/build.
 
 
