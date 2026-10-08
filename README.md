@@ -7,7 +7,7 @@ Sistema de finanças pessoais e da família para o Vinícius e a Isabelle — su
 - **Ordem de construção (fatias):** [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - **Histórico detalhado do que foi feito e por quê:** [`docs/BUILD_LOG.md`](docs/BUILD_LOG.md)
 
-> **Estado atual:** Fatia 0 (Fundação) concluída — login funcionando, banco e testes configurados, PWA instalável.
+> **Estado atual:** Fatia 0 (Fundação) concluída. Fatia 1 (Login e família) em andamento — o **banco já está pronto e validado** (família, convites e RLS com teste de isolamento); as telas de cadastro, onboarding e família vêm na sequência.
 
 ## Stack
 
@@ -42,7 +42,13 @@ npm run dev
 # http://localhost:3000
 ```
 
-Sem um usuário cadastrado não dá para entrar: crie o primeiro em **Supabase → Authentication → Users → Add user** (e-mail + senha). O cadastro pela interface entra na Fatia 1.
+Sem um usuário cadastrado não dá para entrar: crie um em **Supabase → Authentication → Users → Add user** (e-mail + senha, marcando *Auto Confirm User*). O perfil é criado automaticamente. A tela de cadastro própria entra na Fatia 1.
+
+### Configuração necessária no painel do Supabase
+
+| O quê | Onde | Por quê |
+|---|---|---|
+| **"Confirm email" desligado** | Authentication → Sign In / Providers → Email | Com a confirmação ligada, o cadastro não entra direto e o plano gratuito limita o envio de e-mails. Religar quando o app for usado de verdade. |
 
 ## Comandos
 
@@ -55,6 +61,7 @@ Sem um usuário cadastrado não dá para entrar: crie o primeiro em **Supabase �
 | `npm run typecheck` | Gera os tipos de rota do Next (`next typegen`) e roda o `tsc` |
 | `npm test` | Testes unitários (Vitest, executa uma vez e sai) |
 | `npm run test:watch` | Testes em modo watch |
+| `npm run test:rls` | Testes de **integração** (isolamento entre usuários) contra um Supabase de verdade — precisa de credenciais |
 | `npm run format` | Formata tudo com Prettier |
 | `npm run format:check` | Só verifica a formatação (usado no CI) |
 | `python3 scripts/generate-icons.py` | Regera os ícones do PWA |
@@ -76,6 +83,35 @@ npx supabase migration new nome_da_migration
 ```
 
 > Não há migrations ainda: a primeira entra na Fatia 1, junto das tabelas de identidade/família (cada tabela nasce com RLS **e** teste de isolamento).
+
+### Migrations existentes
+
+| Arquivo | O que cria |
+|---|---|
+| `20261008180810_identity_and_households.sql` | `profiles`, `user_settings`, `households`, `household_members`, `household_invites`, as funções de associação (`create_household`, `accept_household_invite`, `leave_household`) e as **10 policies de RLS** |
+
+### Testar o banco localmente (opcional, recomendado)
+
+Útil para mexer em SQL sem tocar no projeto da nuvem:
+
+```bash
+npx supabase start      # sobe o Supabase local (Docker; ~1 GB na primeira vez)
+npx supabase db reset   # aplica todas as migrations do zero
+npx supabase stop       # derruba os contêineres
+```
+
+### Teste de isolamento (RLS)
+
+A regra do projeto é que **nenhum usuário leia dado pessoal de outro** — e isso é verificado por teste, não por leitura de código:
+
+```bash
+npm run test:rls        # usa o Supabase configurado no .env.local
+
+# ou apontando para o Supabase local:
+SUPABASE_TEST_URL=http://127.0.0.1:54321 SUPABASE_TEST_KEY=<publishable key do supabase start> npm run test:rls
+```
+
+O teste cria **uma única vez** (e reaproveita nas execuções seguintes) dois usuários `rls-teste+…@example.com` e uma família "Família de teste (RLS)". Ele **não** roda no CI de propósito: o CI não tem segredos. Para limpar o resíduo, apague a família de teste e depois os dois usuários no painel do Supabase.
 
 ## Estrutura
 

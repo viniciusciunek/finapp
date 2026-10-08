@@ -8,16 +8,17 @@
 
 ## Status atual
 
-- **Fatia em andamento:** **0 — Fundação** (`docs/ROADMAP.md`) — **código concluído**, faltam os passos manuais abaixo
-- **Último passo concluído:** `P14` — Investigação do export estático (GitHub Pages) e decisão por hospedagem em servidor (Vercel)
-- **Próximo passo:** passos manuais do usuário (abaixo) e depois **Fatia 1 — Login e família** (docs/ROADMAP.md)
+- **Fatia em andamento:** **1 — Login e família** (`docs/ROADMAP.md`) — **fase 1 (banco) concluída e validada**; faltam as fases 2 a 5
+- **Último passo concluído:** `P15` — Migration de identidade/família com RLS, funções de associação e teste de isolamento (21 testes unitários + 15 de integração passando)
+- **Próximo passo:** Fase 2 — camada de servidor (`src/server/session.ts`, `src/server/households.ts`, `signUp` em `src/server/auth.ts`)
 - **Pendências manuais (usuário):**
-  - [ ] Informar a URL do repositório GitHub: `git remote add origin <url>` + `git push -u origin main` (o CI só roda depois disso)
-  - [ ] Preencher `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` no `.env.local`
-  - [ ] `npx supabase login` + `npx supabase link --project-ref <ref>` (pedem segredos — só o usuário digita)
-  - [ ] Criar o usuário de teste: Supabase → Authentication → Users → Add user
-  - [ ] Deploy: criar o projeto na Vercel ligado ao repositório e configurar as mesmas variáveis de ambiente
-  - [ ] (Fatia 1) Primeira migration com as tabelas de identidade/família, RLS e teste de isolamento
+  - [x] ~~Informar a URL do repositório GitHub e empurrar~~ — feito: `origin` = `github.com/viniciusciunek/finapp`, local e remoto em dia
+  - [x] ~~Preencher o `.env.local`~~ — feito; projeto Supabase `czqyiuztionqtqanmbep` no ar
+  - [ ] **Desligar a confirmação de e-mail**: Supabase → Authentication → Sign In / Providers → Email → **"Confirm email" DESLIGADO** (senão o cadastro não entra direto)
+  - [ ] `npx supabase login` + `npx supabase link --project-ref czqyiuztionqtqanmbep` (pedem segredos — só o usuário digita)
+  - [ ] **Aplicar a migration na nuvem**: `npx supabase db push` (a migration já foi validada no Supabase local)
+  - [ ] **Rodar o teste de RLS contra a nuvem**: `npm run test:rls` (depois do `db push`)
+  - [ ] Deploy na Vercel (adiado pelo usuário)
 
 ---
 
@@ -820,6 +821,121 @@ Observação que pesou na conversa: o **GitHub Pages publica o site de forma pú
 **Estado final:** nenhuma mudança permanente. Os arquivos usados no teste foram restaurados com `git checkout -- next.config.ts src/app/manifest.ts`, a árvore ficou limpa (`git status` vazio) e o build voltou a passar, com as rotas `◐ /` e `◐ /login` e o `ƒ Proxy (Middleware)`.
 
 **Lição para o futuro:** se em algum momento "hospedagem estática" voltar à mesa, a conversa **não** é sobre uma flag no `next.config.ts` — é sobre reescrever a autenticação para o cliente. Enquanto o login usar Server Actions e sessão em cookie validada no servidor, o deploy precisa de um host com runtime Node (Vercel, Netlify, Cloudflare).
+
+---
+
+### P15 — Fatia 1, fase 1: banco de identidade e família (migration + RLS + testes) · 2026-10-08
+
+**Objetivo da fase:** entregar a estrutura de dados de identidade/família com RLS e **provar o isolamento entre usuários** antes de escrever qualquer tela.
+
+**Comando executado**
+
+```bash
+npx supabase migration new identity_and_households
+# → supabase/migrations/20261008180810_identity_and_households.sql
+```
+
+**O que a migration cria** (~510 linhas, todas comentadas)
+
+| Objeto | Papel |
+|---|---|
+| `profiles` | Nome e e-mail de cada usuário; criado no cadastro |
+| `user_settings` | Preferências (regra do dia de pagamento). **Privada** |
+| `households` | A família (espaço compartilhado) |
+| `household_members` | Vínculo usuário↔família, papel `owner`/`member` |
+| `household_invites` | Convite por código, uso único, validade de 30 dias |
+| 3 funções de apoio | `is_household_member`, `is_household_owner`, `shares_household_with` |
+| 4 funções de domínio | `create_household`, `accept_household_invite`, `leave_household` + trigger `handle_new_user` |
+| 10 policies + grants | RLS em todas as tabelas, com privilégio mínimo |
+
+**Decisões de segurança (o "porquê" de cada uma)**
+
+1. **Ninguém entra numa família por `INSERT`.** `household_members` não tem policy nem grant de `INSERT`. Entrar só é possível por `create_household()` ou `accept_household_invite()`. Saber (ou adivinhar) o id de uma família não basta para se juntar a ela — e isso está testado.
+2. **Toda função `SECURITY DEFINER` usa `set search_path = ''`**, o que obriga nomes totalmente qualificados e fecha o ataque clássico de `search_path`.
+3. **`EXECUTE` revogado de `public`/`anon`** em todas as funções chamáveis; concedido só a `authenticated`.
+4. **Privilégio mínimo de tabela:** `revoke all` seguido do grant específico (`profiles`: select/update; `household_members`: só select; etc.). O RLS decide **linhas**; os grants decidem **ações** — duas camadas independentes.
+5. **`user_settings` é privada até de quem é da família.** É o dado que o teste usa para provar que "faz parte da família" não significa "pode ver tudo".
+6. **Convite de uso único** (`accepted_at`) com validade de 30 dias e `SELECT … FOR UPDATE` no aceite: dois aceites simultâneos do mesmo código não criam dois vínculos.
+7. **Formato do código travado no banco** por `CHECK` (10 caracteres, alfabeto sem `I`/`L`/`O`/`0`/`1`). Nem um cliente malicioso consegue inserir um código fraco tipo `1234`.
+8. **`households.created_by` usa `ON DELETE RESTRICT`** (as outras tabelas usam `CASCADE`): apagar a conta de quem criou a família não pode apagar a família — e os dados — de todo mundo junto. Preferimos um erro a uma perda silenciosa.
+9. **Sem policy de `DELETE` em `households`**: excluir a família não é funcionalidade desta fatia, e a ausência de policy é a forma mais segura de dizer "não".
+
+**Validação local antes de tocar na nuvem (Docker)**
+
+Como o SQL é grande e as policies são sutis, subi um Supabase local para validar de verdade em vez de confiar na leitura:
+
+```bash
+npx supabase start     # primeira vez baixa as imagens (~1 GB)
+# → "Applying migration 20261008180810_identity_and_households.sql..." sem erro
+```
+
+Conferência direta no banco (`docker exec supabase_db_finapp psql …`):
+
+```
+       tabela       | rls_ativa
+--------------------+-----------
+ household_invites | t
+ household_members | t
+ households        | t
+ profiles          | t
+ user_settings     | t
+(5 linhas) + 10 policies
+```
+
+**Teste de isolamento — `src/integration/rls-isolation.integration.test.ts`**
+
+15 asserções em 5 blocos, falando com o Supabase usando **apenas a chave publishable** (nunca a secreta), exatamente como o navegador faz:
+
+1. **Controle positivo:** A vê a própria família, o próprio vínculo, o próprio perfil e as próprias preferências. *Sem isso, um banco que negasse tudo passaria no teste — falso positivo.*
+2. **Estranho:** B não vê família, membros, convites, perfil de A nem preferências de A; não altera o perfil de A; não se junta por `INSERT`; não cria convite na família de A; recebe erro claro ao tentar um código inventado.
+3. **Convite:** A gera o código; B aceita **digitando o código formatado e em minúsculas** (`abc-defg-hjk`).
+4. **Depois de entrar:** B vê a família e o nome de A, mas **continua sem ver as preferências de A** e não consegue renomear a família (só o dono).
+5. **Saída:** B sai e o código de uso único passa a ser recusado como "já utilizado".
+
+**BUG REAL encontrado pelo teste (vale registrar)**
+
+O aceite falhou na primeira execução porque a normalização do código existia em **dois lugares com regras diferentes**:
+
+- TypeScript (`normalizeInviteCode`): remove tudo que não é letra/número e sobe para maiúsculas;
+- SQL (`accept_household_invite`): só fazia `upper(btrim(…))` — **não removia o hífen**.
+
+Resultado: o código exibido (`ABC-DEFG-HJK`) não era aceito quando colado com a formatação. Correção: o SQL passou a usar `regexp_replace(…, '[^a-zA-Z0-9]', '', 'g')`, a mesma regra do TypeScript. **Contrato alinhado nas duas pontas** e coberto por teste.
+
+**Segundo achado — o teste unitário pegou um dado de teste errado**
+
+O primeiro teste do código de convite falhou com `"ABCDEFGHIJ"` e estava certo em falhar: a letra **`I`** está fora do alfabeto justamente por ser ambígua com `1`. A constante de teste é que estava errada. O alfabeto sem caracteres ambíguos é fácil de violar até em teste.
+
+**`leave_household()` — função que nasceu da necessidade do teste**
+
+Sem ela, B entraria na família na primeira execução e ficaria lá para sempre: o cenário "estranho não vê nada" funcionaria **uma única vez** e o teste passaria a mentir nas execuções seguintes. A função também fecha uma lacuna do modelo (quem entra pode sair) e é segura por construção: remove apenas o **próprio** vínculo, e o `owner` não pode sair.
+
+**Estratégia de testes: dois comandos, de propósito**
+
+| Comando | O que roda | Precisa de quê | Roda no CI? |
+|---|---|---|---|
+| `npm test` | Testes unitários (`src/domain/*.test.ts`) | Nada | ✅ sim |
+| `npm run test:rls` | Testes de integração (`*.integration.test.ts`) | Supabase no ar + credenciais | ❌ ainda não |
+
+O CI continua **sem segredo nenhum** e hermético. Os testes de integração são um comando explícito, em vez de serem pulados em silêncio — quem roda precisa ver que rodaram.
+
+**Validação executada**
+
+```bash
+npx supabase db reset   # aplica a migration do zero
+npm run test:rls        # 15 testes passando (contra o Supabase local)
+npm run format          # ok
+npm run lint            # sem erros
+npm run typecheck       # sem erros
+npm test                # 21 testes passando
+```
+
+**Arquivos desta fase**
+
+- `supabase/migrations/20261008180810_identity_and_households.sql` (novo)
+- `src/domain/invite-code.ts` + `src/domain/invite-code.test.ts` (novos)
+- `src/integration/rls-isolation.integration.test.ts` (novo)
+- `vitest.integration.config.mts` (novo); `vitest.config.mts` e `package.json` (editados)
+- `docs/DOMAIN.md` — §2 (entidades), §3.1 e §3.2 (privacidade e funções), §4.10 (regras da família/convite) e §5 (testes 8 e 9)
 
 ---
 

@@ -35,8 +35,9 @@ yarn-error.log*
 # exceção: o arquivo de exemplo PODE e DEVE ser versionado (documenta as variáveis)
 !.env.example
 
-# supabase
+# supabase (artefatos locais do CLI — config.toml e migrations SÃO versionados)
 supabase/.temp/
+supabase/.branches/
 
 # vercel
 .vercel
