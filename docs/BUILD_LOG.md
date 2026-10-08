@@ -8,15 +8,16 @@
 
 ## Status atual
 
-- **Fatia em andamento:** **0 — Fundação** (`docs/ROADMAP.md`)
-- **Último passo concluído:** `P12` — `README.md` escrito (setup, comandos, estrutura, convenções, problemas conhecidos)
-- **Próximo passo:** `P13` — Validação final da Fatia 0 + commit inicial
+- **Fatia em andamento:** **0 — Fundação** (`docs/ROADMAP.md`) — **código concluído**, faltam os passos manuais abaixo
+- **Último passo concluído:** `P13` — Validação final + commit inicial (`18021bd`)
+- **Próximo passo:** passos manuais do usuário (abaixo) e depois **Fatia 1 — Login e família** (docs/ROADMAP.md)
 - **Pendências manuais (usuário):**
-  - [ ] Informar a URL do repositório GitHub (remote `origin`) — ainda não configurado localmente
+  - [ ] Informar a URL do repositório GitHub: `git remote add origin <url>` + `git push -u origin main` (o CI só roda depois disso)
   - [ ] Preencher `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` no `.env.local`
-  - [ ] Rodar `npx supabase link --project-ref <ref>` (pede a senha do banco — segredo, só o usuário digita)
-  - [ ] Criar um usuário de teste no dashboard do Supabase (Auth → Users) para validar o login
-  - [ ] Criar o projeto na Vercel e configurar as variáveis de ambiente (Fase E)
+  - [ ] `npx supabase login` + `npx supabase link --project-ref <ref>` (pedem segredos — só o usuário digita)
+  - [ ] Criar o usuário de teste: Supabase → Authentication → Users → Add user
+  - [ ] Deploy: criar o projeto na Vercel ligado ao repositório e configurar as mesmas variáveis de ambiente
+  - [ ] (Fatia 1) Primeira migration com as tabelas de identidade/família, RLS e teste de isolamento
 
 ---
 
@@ -723,5 +724,73 @@ npm run build       # rotas: ◐ / · ◐ /login · ○ /_not-found · ○ /icon
 | **Convenções que não se quebram** | As 7 regras das instruções, resumidas — inclusive a nova regra do `<Suspense>` (D9) |
 | Problemas conhecidos | As 5 vulnerabilidades `high` do `npm audit` com a explicação de por que **não** aplicar o "fix" |
 | Deploy e CI | O que falta e o que já roda |
+
+---
+
+### P13 — Validação final e commit inicial · 2026-10-08
+
+**Suíte completa executada**
+
+```bash
+npm run lint         # sem erros
+npm run format:check # "All matched files use Prettier code style!"
+npm run typecheck    # next typegen + tsc, sem erros
+npm test             # 6 testes passando
+npm run build        # ✓
+```
+
+**Rotas no build final**
+
+```
+Route (app)
+┌ ◐ /            ← rota protegida (shell estático + conteúdo em streaming)
+├ ○ /_not-found
+├ ○ /apple-icon.png
+├ ○ /icon.png
+├ ◐ /login
+└ ○ /manifest.webmanifest
+
+ƒ Proxy (Middleware)
+```
+
+**Verificação de integridade do disco**
+
+Como o incidente do `P11` mostrou que o editor e o disco podem divergir, rodei uma conferência de 14 arquivos-chave lendo **do disco** e procurando marcadores conhecidos (ex.: `layout.tsx` contém `export const viewport` e `pt-BR`; `ci.yml` contém `actions/checkout@v7`; `BUILD_LOG.md` contém `P12`). Resultado: **todos sincronizados**.
+
+**Commit inicial**
+
+```bash
+git add -A
+# conferência antes de commitar:
+#   - 48 arquivos
+#   - nenhuma ocorrência dos valores de teste usados nos .env.local temporários
+#   - únicos arquivos com "env" no nome: .env.example (valores vazios) e src/lib/supabase/env.ts
+git commit -m "feat: fundação do projeto (Next.js 16, Supabase Auth, Vitest, CI e PWA)"
+# → 18021bd
+```
+
+**O que ficou de fora de propósito (e por quê)**
+
+| Item | Motivo |
+|---|---|
+| Service worker / offline | Fora do escopo do MVP; risco de cachear HTML privado (D5 revisada) |
+| Tabelas de negócio e migrations | Entram na Fatia 1, cada uma com RLS e teste de isolamento (D3) |
+| `parseAmountToCents`, `splitInstallments`, `resolveStatementMonth` | Pertencem às Fatias 3 e 4 |
+| Configuração da Vercel | Depende de acesso do usuário |
+| `git remote` | Depende da URL do repositório GitHub |
+
+---
+
+## Resumo da Fatia 0
+
+**Critério do `ROADMAP.md`:** *"deploy no ar, login funciona, `npm test` roda"*.
+
+| Critério | Situação |
+|---|---|
+| `npm test` roda | ✅ 6 testes passando, também no CI |
+| Login funciona | ✅ código pronto e verificado em runtime (redireciona sem sessão, permite logar com usuário válido); **falta o teste com o usuário real**, que depende das credenciais do Supabase |
+| Deploy no ar | ⏳ **pendente do usuário**: criar o projeto na Vercel e configurar as variáveis |
+
+**Números:** 48 arquivos versionados · 9 decisões registradas · 14 passos documentados · 0 erros de lint/tipo/teste/build.
 
 
