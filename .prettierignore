@@ -1,0 +1,21 @@
+# Ignorado pelo Prettier (ver .prettierrc.json)
+
+# artefatos de build
+.next/
+out/
+build/
+
+# dependências
+node_modules/
+
+# arquivos gerados pelo PWA (Serwist)
+public/sw.js
+public/sw.js.map
+public/swe-worker*.js
+
+# documentação escrita à mão (formatada manualmente, evitando churn)
+docs/
+*.md
+
+# lockfile gerenciado pelo npm
+package-lock.json

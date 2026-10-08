@@ -1,0 +1,63 @@
+# Integração contínua — roda em todo push na main e em todo pull request.
+#
+# O que é verificado (nesta ordem, do mais barato para o mais caro):
+#   1. lint          → regras do ESLint (inclui as regras do Next)
+#   2. format:check  → o código está no padrão do Prettier (não escreve nada)
+#   3. typecheck     → `next typegen` + `tsc --noEmit` (erros de tipo)
+#   4. test          → testes unitários do domínio (Vitest)
+#   5. build         → build de produção do Next
+#
+# Por que o build entra mesmo com deploy automático na Vercel: o CI precisa ser
+# uma barreira completa por si só (erros específicos do Next, como as regras do
+# Cache Components, só aparecem no build). Se um dia isso ficar redundante,
+# é esta etapa que deve sair primeiro.
+#
+# NÃO precisa de segredos: nenhuma etapa acessa o Supabase. Os testes são de
+# regras puras e o build não executa código que lê cookies (isso fica atrás do
+# limite de <Suspense> e só roda em requisição).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Se houver vários pushes seguidos no mesmo branch, cancela a execução anterior.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Qualidade (lint, tipos, testes, build)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v7
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v7
+        with:
+          # Mesma versão usada no desenvolvimento (v24.16.0)
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Formatação (verificação)
+        run: npm run format:check
+
+      - name: Tipos
+        run: npm run typecheck
+
+      - name: Testes
+        run: npm test
+
+      - name: Build de produção
+        run: npm run build
