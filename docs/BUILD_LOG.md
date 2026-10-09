@@ -1387,6 +1387,45 @@ Além do README (comandos novos, a trava e a limpeza), o `.github/instructions/c
 
 ---
 
+### P22 — O cadastro não funcionava no projeto real (migrations pendentes na nuvem) · 2026-10-09
+
+**Sintoma (relatado pelo usuário, com o log do servidor):**
+
+```
+└─ ƒ createCreditCardAction({"error":"Não foi possível criar o cartão. Tente de novo."}, {})
+```
+
+"Não foi possível criar nem conta nem cartão." A mensagem é a genérica de erro de banco — só códigos em `{22023, 23505, 42501}` podem virar texto específico; todo o resto cai nela de propósito.
+
+**Diagnóstico.** Nenhuma linha de código precisou ser lida: o problema era o **banco do projeto real estar atrás do código**. A sonda que provou isso usa só a chave publicável, não escreve nada e distingue "não existe" de "existe e barra o anônimo":
+
+```bash
+set -a; . ./.env.local; set +a
+for t in households accounts credit_cards categories transactions; do
+  printf '%-14s ' "$t"
+  curl -s -o /dev/null -w '%{http_code}\n' \
+    "$NEXT_PUBLIC_SUPABASE_URL/rest/v1/$t?select=id&limit=1" \
+    -H "apikey: $NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY"
+done
+
+# antes   → households 401 · accounts 404 · credit_cards 404 · categories 404 · transactions 404
+# depois  → todas 401
+```
+
+`404` = tabela **não existe** (o insert morria em `42P01`, que não está na lista de códigos visíveis → mensagem genérica). `401` = tabela existe e o RLS está barrando o anônimo — o esperado.
+
+**Causa.** A nuvem tinha só **duas** migrations (`20261008180810` identidade/família e `20261009141956` backfill). Faltavam a da Fatia 2 (`20261009122953` contas e cartões) e a da G1 (`20261009150000` categorias e lançamentos). O `CI` passava verde porque monta um banco **local** do zero a cada execução — local e nuvem não andam juntos sozinhos.
+
+**Responsabilidade:** o `db push` ficou como tarefa do usuário na Fatia 1 e **eu não cobrei** nas fases seguintes. Nada de "o processo falhou": o acompanhamento é meu.
+
+**Correção.** `npx supabase db push` recusou com `DbPushMissingRemoteError` — a migration da Fatia 2 tem timestamp (12:29:53) **anterior** à última aplicada na nuvem (14:19:56), e o CLI protege o histórico contra inserção fora de ordem. A saída é `npx supabase db push --include-all`, que aplica as pendentes **em ordem de timestamp** (contas/cartões antes de categorias/lançamentos, que têm chave estrangeira para elas). Aplicado e conferido: cinco tabelas em 401 e `supabase migration list --linked` com local = remoto nas quatro migrations. O seed das categorias básicas também rodou — a família que já existia recebeu Mercado, Casa, Transporte, Saúde, Lazer e Outros.
+
+**Nenhum arquivo do app mudou** — só o banco da nuvem. Este passo existe porque o incidente não foi de código, e é o tipo de coisa que se repete: a próxima migration nasce igual.
+
+**Regra durável (também na memória do repositório):** *fase de banco só termina com `db push` feito* — e, quando o CLI recusar por ordem, `--include-all` com a checagem de que as dependências continuam na frente.
+
+---
+
 ## Resumo da Fatia 0
 
 **Critério do `ROADMAP.md`:** *"deploy no ar, login funciona, `npm test` roda"*.
