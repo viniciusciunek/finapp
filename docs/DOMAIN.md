@@ -21,9 +21,13 @@
 - `user_settings` — user_id, payday_rule (padrão: `nth_business_day`) + payday_business_day (padrão: 5 = 5º dia útil). **Privada**: nem membro da família lê (§3.1).
 - `household_invites` — household_id, `code` (10 caracteres do alfabeto sem ambíguos, único), role, expires_at (padrão: +30 dias), accepted_at, accepted_by. Convite **de uso único**.
 
-### Contas e cartões
-- `accounts` — scope, owner_user_id/household_id, name, bank, type (`checking`|`savings`|`cash`), balance_cents, balance_as_of (para saldo informado).
+### Contas e cartões (Fatia 2)
+- `accounts` — scope, owner_user_id/household_id, name, bank (nulo para dinheiro em espécie), type (`checking`|`savings`|`cash`), balance_cents, balance_as_of.
+  - As colunas de saldo existem desde a Fatia 2, mas ficam **nulas**: quem define a regra do saldo informado é a Fatia 8 (§4.9).
 - `credit_cards` — scope, owner_user_id/household_id, name, closing_day (1–31), due_day (1–31), limit_cents (nulo).
+- **Escopo:** `personal` exige `owner_user_id` e proíbe `household_id`; `household` exige o contrário. Garantido por CHECK na tabela — não existe linha sem dono nem linha ambígua com os dois.
+- **Dono e escopo são imutáveis** depois de criados (trigger `forbid_ownership_change`). Sem isso, um membro poderia “puxar” para o pessoal dele uma conta que era da família — sumindo com ela para o outro sem apagar nada.
+- `created_by` é **anulável** nestas tabelas (`on delete set null`), diferente das tabelas de identidade: são linhas que podem ser compartilhadas, e apagar a conta de quem as criou não pode levar junto a conta bancária da família. O ciclo de vida delas vem do dono (`owner_user_id`/`household_id`, ambos `on delete cascade`).
 
 ### Pessoas e categorias
 - `people` — owner_user_id, name, relationship (Pai, Tio, Sogra...). Pessoas são **privadas** do usuário que as criou.
@@ -31,6 +35,7 @@
 
 ### Lançamentos
 - `transactions` — scope, dono, description, category_id, `total_cents`, `occurred_on`, `payment_method` (`pix`|`cash`|`debit`|`boleto`|`credit`), `account_id` (nulo se crédito), `card_id` (só crédito), `installments_count` (padrão 1), `on_behalf_of_person_id` (nulo = gasto próprio), notes.
+  - **Pendência para a Fatia 3:** decidir o `ON DELETE` de `account_id`/`card_id`. Apagar uma conta que já tem lançamento não pode apagar histórico — o mais provável é `restrict` (bloquear) com a interface explicando o motivo.
 - `card_installments` — transaction_id, number (1..n), amount_cents, statement_id. Só existe para `payment_method = 'credit'`.
 
 ### Faturas
@@ -74,6 +79,12 @@ São necessárias porque uma policy em `household_members` que consultasse a pr�
 - `create_household(name)` — cria a família e o vínculo de dono na mesma transação; recusa quem já tem família.
 - `accept_household_invite(code)` — normaliza o código (tira hífen/espaço, sobe para maiúsculas), valida existência, uso e validade, cria o vínculo e marca o convite como usado. Trava a linha (`for update`) para dois aceites simultâneos do mesmo código não criarem dois vínculos.
 - `leave_household()` — remove o **próprio** vínculo. O `owner` não pode sair (a família ficaria sem quem a administre).
+
+### 3.3 Regras por tabela de contas e cartões (Fatia 2)
+- `accounts` e `credit_cards`: lê e escreve **o dono** (escopo `personal`) ou **qualquer membro** da família (escopo `household`).
+- Cada ação tem a sua policy (select/insert/update/delete): escopo novo não pode nascer “pela metade”, com uma ação esquecida.
+- No `INSERT`, `created_by` precisa ser quem está inserindo — ninguém cria linha em nome de outro.
+- Teste obrigatório em `src/integration/accounts-isolation.integration.test.ts`, **com controle positivo**: o membro da família vê o que é compartilhado e continua sem ver o que é pessoal do outro. Só o lado negativo passaria num banco que negasse tudo.
 
 ## 4. Regras de negócio
 
@@ -133,6 +144,7 @@ São necessárias porque uma policy em `household_members` que consultasse a pr�
 - Sem rendimento automático; `yield` é lançado à mão.
 
 ### 4.9 Saldo de contas (opcional)
+- **As colunas `balance_cents`/`balance_as_of` já existem em `accounts` desde a Fatia 2**, mas ficam nulas e nenhuma tela as mostra: a regra abaixo é da Fatia 8.
 - `balance_cents` + `balance_as_of` = saldo informado. Saldo exibido = informado + movimentos (`pix`/`cash`/`debit`/`boleto` e pagamentos de fatura, menos; recebimentos, mais) com data **posterior** a `balance_as_of`.
 - "Ajustar saldo" cria um novo ponto informado (não apaga histórico).
 

@@ -1,12 +1,22 @@
 import { randomInt } from "node:crypto";
 
-import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { type SupabaseClient } from "@supabase/supabase-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { formatInviteCode, generateInviteCode } from "@/domain/invite-code";
 
+import {
+  ensureHousehold,
+  ensureOutsideHousehold,
+  requireTestCredentials,
+  signInOrSignUp,
+  TEST_HOUSEHOLD_NAME,
+  USER_A,
+  USER_B,
+} from "./support/fixtures";
+
 /**
- * TESTE DE ISOLAMENTO ENTRE USUÁRIOS (RLS)
+ * TESTE DE ISOLAMENTO ENTRE USUÁRIOS (RLS) — identidade e família
  * =============================================================================
  * Obrigatório pela regra 2 ("nenhuma tabela sem teste de isolamento") e pela
  * regra 7 ("dados pessoais de um usuário nunca podem ser lidos por outro") das
@@ -28,96 +38,12 @@ import { formatInviteCode, generateInviteCode } from "@/domain/invite-code";
  * Controles positivos: os mesmos testes verificam que A VÊ os próprios dados.
  * Sem isso, um banco que negasse tudo passaria no teste — falso positivo.
  *
- * ⚠️ Estes testes CRIAM DADOS no projeto configurado (dois usuários
- * `rls-teste+…@example.com` e uma família "Família de teste (RLS)"). Eles são
- * reutilizados a cada execução, então não crescem. Para remover tudo:
- * no painel do Supabase, apague a família de teste e depois os dois usuários.
+ * Os usuários, a família e o convite vêm de `./support/fixtures`, que é
+ * compartilhado com o teste de isolamento de contas e cartões.
  *
  * Rodar: `npm run test:rls`
  * =============================================================================
  */
-
-const SUPABASE_URL = process.env.RLS_TEST_URL ?? "";
-const SUPABASE_KEY = process.env.RLS_TEST_KEY ?? "";
-
-/** Nome fixo: identificar o resíduo de teste no painel é trivial. */
-const TEST_HOUSEHOLD_NAME = "Família de teste (RLS)";
-
-/**
- * Contas de teste reutilizadas a cada execução.
- *
- * As credenciais estão escritas aqui **de propósito**, e o repositório é
- * público: qualquer pessoa as lê. Isso é aceitável só porque elas existem em
- * bancos **descartáveis** — o Supabase local de desenvolvimento e o que sobe
- * dentro do CI. Se algum dia este teste apontar para um projeto de verdade,
- * apague estas contas por lá: a senha está à vista.
- */
-const USER_A = {
-  email: "rls-teste+a@example.com",
-  password: "teste-rls-usuario-a",
-};
-const USER_B = {
-  email: "rls-teste+b@example.com",
-  password: "teste-rls-usuario-b",
-};
-
-function newClient(): SupabaseClient {
-  return createClient(SUPABASE_URL, SUPABASE_KEY, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-}
-
-/** Entra com o usuário; na primeira execução, cadastra antes. */
-async function signInOrSignUp(credentials: {
-  email: string;
-  password: string;
-}): Promise<{ client: SupabaseClient; userId: string }> {
-  const client = newClient();
-
-  // Na primeira execução cria a conta; nas seguintes o cadastro já existe e o
-  // erro é esperado — o login abaixo é que decide se o teste pode continuar.
-  await client.auth.signUp(credentials);
-
-  const { data, error } = await client.auth.signInWithPassword(credentials);
-
-  if (error || !data.user) {
-    const hint = /confirm/i.test(error?.message ?? "")
-      ? " Desligue 'Confirm email' em Authentication → Sign In / Providers → Email."
-      : "";
-
-    throw new Error(
-      `Não foi possível autenticar ${credentials.email}: ${error?.message ?? "sem usuário"}.${hint}`,
-    );
-  }
-
-  return { client, userId: data.user.id };
-}
-
-/** Devolve a família de teste de A, criando na primeira execução. */
-async function ensureHousehold(client: SupabaseClient): Promise<string> {
-  const { data, error } = await client.rpc("create_household", {
-    household_name: TEST_HOUSEHOLD_NAME,
-  });
-
-  if (!error && typeof data === "string") {
-    return data;
-  }
-
-  // Segunda execução em diante: o MVP permite uma família por usuário, então
-  // create_household recusa e reaproveitamos a que já existe.
-  const { data: membership } = await client
-    .from("household_members")
-    .select("household_id")
-    .maybeSingle();
-
-  if (!membership) {
-    throw new Error(
-      `Não foi possível obter a família de teste: ${error?.message ?? "usuário sem vínculo"}`,
-    );
-  }
-
-  return membership.household_id as string;
-}
 
 let clientA: SupabaseClient;
 let clientB: SupabaseClient;
@@ -126,20 +52,14 @@ let userBId: string;
 let householdId: string;
 
 beforeAll(async () => {
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    throw new Error(
-      "Credenciais ausentes. Preencha NEXT_PUBLIC_SUPABASE_URL e " +
-        "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY no .env.local, ou defina " +
-        "SUPABASE_TEST_URL/SUPABASE_TEST_KEY para apontar para outro Supabase.",
-    );
-  }
+  requireTestCredentials();
 
   ({ client: clientA, userId: userAId } = await signInOrSignUp(USER_A));
   ({ client: clientB, userId: userBId } = await signInOrSignUp(USER_B));
 
   // Estado inicial do cenário: B **fora** da família de A. Se uma execução
   // anterior deixou B dentro, sai agora (erro esperado quando já está fora).
-  await clientB.rpc("leave_household");
+  await ensureOutsideHousehold(clientB);
 
   householdId = await ensureHousehold(clientA);
 });
