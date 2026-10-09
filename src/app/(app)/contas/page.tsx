@@ -62,7 +62,11 @@ async function AccountsContent() {
     householdId: context.household.id,
   };
 
-  const currentMonth = monthKeyOf(new Date());
+  const now = new Date();
+  const currentMonth = monthKeyOf(now);
+  // Hoje em data local, no formato que o banco usa. É o que define a fatura
+  // aberta de cada cartão (o dia da compra é o que decide o ciclo).
+  const today = `${currentMonth}-${String(now.getDate()).padStart(2, "0")}`;
   const currentWindow = monthRange(currentMonth);
   const previousWindow = monthRange(shiftMonth(currentMonth, -1));
 
@@ -77,29 +81,38 @@ async function AccountsContent() {
   ]);
 
   /**
-   * Fatura de agora, por cartão: soma das compras de crédito que a regra do
-   * fechamento manda para este mês.
+   * Fatura **aberta**, por cartão: a soma das compras de crédito que a regra do
+   * fechamento manda para o ciclo que ainda está rodando.
+   *
+   * É a fatura aberta — `resolveStatementMonth(hoje, closingDay)` —, **não** a do
+   * mês de calendário: num cartão cujo fechamento já passou, a aberta é a do mês
+   * seguinte, e era para lá que a compra tinha ido. Mostrar "fatura de outubro"
+   * nesse caso dizia R$ 0,00 e parecia que nada tinha somado.
    *
    * É **derivada**, não guardada: apagar ou editar um lançamento muda a fatura
-   * sozinho, sem nenhum número para ficar desencontrado. A fatura com valor
-   * "real" informado à mão é a Fatia 4.
+   * sozinho. A fatura fechada, com valor real informado à mão, é a Fatia 4.
    */
-  const statementByCard = new Map<string, number>();
+  const statementByCard = new Map<
+    string,
+    { month: string; totalCents: number }
+  >();
 
   for (const card of cardsResult.cards) {
-    statementByCard.set(
-      card.id,
-      sumCents(
+    const openStatement = resolveStatementMonth(today, card.closingDay);
+
+    statementByCard.set(card.id, {
+      month: openStatement,
+      totalCents: sumCents(
         transactionsResult.transactions
           .filter((item) => item.cardId === card.id)
           .filter(
             (item) =>
               resolveStatementMonth(item.occurredOn, card.closingDay) ===
-              currentMonth,
+              openStatement,
           )
           .map((item) => item.totalCents),
       ),
-    );
+    });
   }
 
   const isHouseholdView = scope === "household";
@@ -189,8 +202,11 @@ async function AccountsContent() {
                       : ` · limite ${formatBrl(card.limitCents)}`}
                   </p>
                   <p className="text-sm font-medium">
-                    Fatura de {monthLabel(currentMonth)}:{" "}
-                    {formatBrl(statementByCard.get(card.id) ?? 0)}
+                    Fatura aberta —{" "}
+                    {monthLabel(
+                      statementByCard.get(card.id)?.month ?? currentMonth,
+                    )}
+                    : {formatBrl(statementByCard.get(card.id)?.totalCents ?? 0)}
                   </p>
                 </Link>
               </li>
