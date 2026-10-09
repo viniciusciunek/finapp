@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_SCOPE, SCOPES, isScope, parseScope } from "./scope";
+import {
+  DEFAULT_SCOPE,
+  SCOPES,
+  isScope,
+  ownershipForScope,
+  parseScope,
+} from "./scope";
 
 describe("isScope", () => {
   it("aceita os escopos do domínio", () => {
@@ -32,5 +38,21 @@ describe("parseScope", () => {
     expect(parseScope(null)).toBe(DEFAULT_SCOPE);
     expect(parseScope("qualquer coisa")).toBe(DEFAULT_SCOPE);
     expect(parseScope("")).toBe(DEFAULT_SCOPE);
+  });
+});
+
+describe("ownershipForScope", () => {
+  it("no escopo pessoal, a linha é do usuário e não tem família", () => {
+    expect(ownershipForScope("personal", "usuario-1", "familia-1")).toEqual({
+      ownerUserId: "usuario-1",
+      householdId: null,
+    });
+  });
+
+  it("no escopo da família, a linha é da família e não tem dono", () => {
+    expect(ownershipForScope("household", "usuario-1", "familia-1")).toEqual({
+      ownerUserId: null,
+      householdId: "familia-1",
+    });
   });
 });

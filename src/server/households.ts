@@ -4,6 +4,8 @@ import { parseHouseholdRole, type HouseholdRole } from "@/domain/household";
 import { generateInviteCode } from "@/domain/invite-code";
 import { createClient } from "@/lib/supabase/server";
 
+import { toUserMessage } from "./errors";
+
 /**
  * Família e convites — camada de acesso a dados.
  *
@@ -28,37 +30,6 @@ export type HouseholdInvite = {
   code: string;
   expiresAt: string;
 };
-
-/**
- * Códigos de erro do Postgres cujas mensagens são escritas **para o usuário**.
- *
- * As funções `create_household`, `accept_household_invite` e `leave_household`
- * levantam exceções em português e sem jargão — são essas que queremos mostrar.
- * Qualquer outro erro (conexão, `PGRST`, permissão inesperada) vem em inglês e
- * técnico: nesses casos é melhor a mensagem padrão do que vazar detalhe.
- */
-const BUSINESS_ERROR_CODES = new Set([
-  "22023", // valor inválido: código inexistente, expirado ou já utilizado
-  "23505", // conflito: já faz parte de uma família
-  "42501", // autorização: não autenticado / dono não pode sair
-]);
-
-function toUserMessage(
-  error: { code?: string; message?: string } | null,
-  fallback: string,
-): string | null {
-  if (!error) {
-    return null;
-  }
-
-  const message = error.message?.trim();
-
-  if (message && BUSINESS_ERROR_CODES.has(error.code ?? "")) {
-    return message;
-  }
-
-  return fallback;
-}
 
 /** Cria a família e torna quem chamou o `owner` (atômico, no banco). */
 export async function createHousehold(

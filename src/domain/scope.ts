@@ -31,3 +31,24 @@ export function isScope(value: unknown): value is Scope {
 export function parseScope(value: unknown): Scope {
   return isScope(value) ? value : DEFAULT_SCOPE;
 }
+
+/**
+ * Dono de uma linha, a partir do escopo escolhido.
+ *
+ * Espelha o CHECK de escopo das tabelas que têm escopo (`accounts` e
+ * `credit_cards` hoje, as próximas depois): pessoal exige `owner_user_id` e
+ * proíbe `household_id`; família exige o contrário. Como o app monta esse par
+ * ao criar conta e ao criar cartão, a regra fica aqui — uma vez só, com teste.
+ *
+ * O banco recusaria o par errado de qualquer forma; isto evita descobrir isso
+ * pela mensagem de erro, depois de tentar gravar.
+ */
+export function ownershipForScope(
+  scope: Scope,
+  userId: string,
+  householdId: string,
+): { ownerUserId: string | null; householdId: string | null } {
+  return scope === "personal"
+    ? { ownerUserId: userId, householdId: null }
+    : { ownerUserId: null, householdId };
+}
