@@ -1524,6 +1524,8 @@ done
 - `src/app/(app)/lancar/**` (tela, formulário e edição) e a Visão geral virando lista do mês
 - `src/integration/transactions-isolation.integration.test.ts`
 
+**Errata (mesmo dia):** a fatura mostrada em `/contas` era a do **mês de calendário**, não a **aberta**. Num cartão cujo fechamento já passou, a aberta é a do mês seguinte — e a tela dizia "Fatura de outubro: R$ 0,00" para uma compra que tinha ido, corretamente, para novembro. Corrigido em `3912ea5`: a referência passou a ser `resolveStatementMonth(hoje, closingDay)` e o rótulo virou "Fatura aberta — novembro de 2026: R$ X", por cartão. Confirmado pelo usuário no app real. **A regra pura não mudou** — o erro era qual fatura destacar. O teste desta fase não pegou porque o cartão de teste fechava dia 20, quando as duas coincidem: a lição é escolher cartão de teste que **contradiz** a hipótese, não que a confirma.
+
 ---
 
 ## Resumo da Fatia 3 — concluída (fases 1 a 6)

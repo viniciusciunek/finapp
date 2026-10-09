@@ -141,9 +141,9 @@ export function QuickEntryForm(props: QuickEntryFormProps) {
     });
   }
 
-  // Sem conta no escopo não há de onde tirar o dinheiro — e o banco recusaria.
-  // Melhor dizer isso agora do que só descobrir ao salvar.
-  if (accounts.length === 0) {
+  // Sem conta E sem cartão não há de onde tirar o dinheiro — e o banco recusaria.
+  // Com cartão, o lançamento no crédito é caminho válido mesmo sem conta.
+  if (accounts.length === 0 && cards.length === 0) {
     return (
       <Card>
         <CardContent className="space-y-3 pt-6">
