@@ -1480,6 +1480,6 @@ done
 
 **O que ainda não existe (e onde entra):** lançamentos, categorias e a Folha do mês são a Fatia 3 — é lá que a pendência do `ON DELETE` de `account_id`/`card_id` ganha resposta (`DOMAIN.md` §2).
 
-**Pendências do projeto:** deploy na Vercel (adiado pelo usuário — o cadastro das contas e cartões reais, que era a outra, foi concluído em 2026-10-09).
+**Fechamento:** o critério do roadmap foi atendido em 2026-10-09 — as contas e cartões reais entraram pelo app, nos dois escopos, e cada um aparece na visão certa. O deploy fica para quando o app tiver uso dos dois (não é pendência desta fatia).
 
 
