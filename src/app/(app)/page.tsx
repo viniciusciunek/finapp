@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { Suspense } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getScope } from "@/server/scope";
 import { requireHousehold } from "@/server/session";
@@ -53,6 +55,10 @@ async function OverviewContent() {
             : "O que é só seu — invisível para qualquer outra pessoa, inclusive para a família."}
         </p>
       </div>
+
+      <Button asChild className="w-full" size="lg">
+        <Link href="/lancar">Lançar despesa</Link>
+      </Button>
 
       <div className="rounded-xl border border-dashed p-6 text-center">
         <p className="text-sm font-medium">Nada por aqui ainda</p>
