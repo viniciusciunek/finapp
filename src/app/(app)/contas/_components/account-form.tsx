@@ -13,8 +13,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ACCOUNT_TYPES, labelForAccountType } from "@/domain/account";
+import type { AccountValues } from "@/server/accounts";
 
-import { createAccountAction, type AccountFormState } from "../actions";
+import {
+  createAccountAction,
+  updateAccountAction,
+  type AccountFormState,
+} from "../actions";
 
 const initialState: AccountFormState = { error: null };
 
@@ -29,27 +34,52 @@ const SELECT_CLASSES =
   "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 disabled:bg-input/50 h-8 w-full min-w-0 appearance-none rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:ring-3 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm";
 
 /**
- * Formulário de conta, usado para criar (e, depois, para editar).
- *
- * O `scopeLabel` é **só exibição**: serve para a pessoa saber onde a conta vai
- * entrar. O escopo de verdade é lido no servidor, dentro da Server Action —
- * passá-lo pelo formulário seria confiar no cliente.
+ * O que o formulário precisa em cada modo. União discriminada de propósito: no
+ * modo `edit`, o id é obrigatório **de tipo**, então não existe o caminho de
+ * renderizar o campo escondido com valor indefinido.
  */
-export function AccountForm({ scopeLabel }: { scopeLabel: string }) {
+type AccountFormProps =
+  | { mode: "create"; description: string }
+  | {
+      mode: "edit";
+      description: string;
+      id: string;
+      initialValues: AccountValues;
+    };
+
+/**
+ * Formulário de conta — criar e editar, um só.
+ *
+ * Os campos são os mesmos nos dois modos; o que muda é o título, o texto do
+ * botão e a ação chamada. Um formulário só evita a duplicação que sempre acaba
+ * com os dois lados diferentes.
+ *
+ * A `description` chega pronta de quem chama: criar fala em onde a conta vai
+ * entrar, editar fala de quem é a conta (o escopo é imutável — D20). O escopo
+ * de verdade continua sendo lido no servidor, dentro da Server Action.
+ */
+export function AccountForm(props: AccountFormProps) {
+  const isCreate = props.mode === "create";
+  const initial = props.mode === "edit" ? props.initialValues : null;
+
   const [state, formAction, isPending] = useActionState(
-    createAccountAction,
+    isCreate ? createAccountAction : updateAccountAction,
     initialState,
   );
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Nova conta</CardTitle>
-        <CardDescription>Vai entrar em {scopeLabel}.</CardDescription>
+        <CardTitle>{isCreate ? "Nova conta" : "Editar conta"}</CardTitle>
+        <CardDescription>{props.description}</CardDescription>
       </CardHeader>
 
       <CardContent>
         <form action={formAction} className="space-y-4">
+          {props.mode === "edit" ? (
+            <input type="hidden" name="id" value={props.id} />
+          ) : null}
+
           <div className="space-y-2">
             <Label htmlFor="account-name">Nome</Label>
             <Input
@@ -60,6 +90,7 @@ export function AccountForm({ scopeLabel }: { scopeLabel: string }) {
               maxLength={60}
               required
               disabled={isPending}
+              defaultValue={initial?.name ?? ""}
             />
           </div>
 
@@ -72,6 +103,7 @@ export function AccountForm({ scopeLabel }: { scopeLabel: string }) {
               placeholder="Deixe vazio para dinheiro em espécie"
               maxLength={60}
               disabled={isPending}
+              defaultValue={initial?.bank ?? ""}
             />
           </div>
 
@@ -80,7 +112,7 @@ export function AccountForm({ scopeLabel }: { scopeLabel: string }) {
             <select
               id="account-type"
               name="type"
-              defaultValue="checking"
+              defaultValue={initial?.type ?? "checking"}
               className={SELECT_CLASSES}
               disabled={isPending}
             >
@@ -99,7 +131,13 @@ export function AccountForm({ scopeLabel }: { scopeLabel: string }) {
           ) : null}
 
           <Button type="submit" className="w-full" disabled={isPending}>
-            {isPending ? "Criando..." : "Criar conta"}
+            {isPending
+              ? isCreate
+                ? "Criando..."
+                : "Salvando..."
+              : isCreate
+                ? "Criar conta"
+                : "Salvar mudanças"}
           </Button>
         </form>
       </CardContent>

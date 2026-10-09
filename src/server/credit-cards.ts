@@ -1,4 +1,5 @@
 import { ownershipForScope, parseScope, type Scope } from "@/domain/scope";
+import { isUuid } from "@/domain/uuid";
 import { createClient } from "@/lib/supabase/server";
 
 import { toUserMessage } from "./errors";
@@ -90,6 +91,11 @@ export async function listCreditCards(
 export async function getCreditCard(
   cardId: string,
 ): Promise<{ card: CreditCard | null; error: string | null }> {
+  // Id sem forma de id é "não encontrado", não erro de cast (ver `isUuid`).
+  if (!isUuid(cardId)) {
+    return { card: null, error: null };
+  }
+
   const supabase = await createClient();
 
   const { data, error } = await supabase

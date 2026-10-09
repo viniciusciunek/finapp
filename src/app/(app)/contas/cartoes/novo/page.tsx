@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { getScope } from "@/server/scope";
 import { requireHousehold } from "@/server/session";
 
+import { BackToAccountsLink } from "../../_components/back-link";
 import { CardForm } from "../../_components/card-form";
 
 export const metadata: Metadata = {
@@ -43,14 +43,9 @@ async function NewCardContent() {
 
   return (
     <div className="space-y-4">
-      <Link
-        href="/contas"
-        className="text-muted-foreground hover:text-foreground text-sm"
-      >
-        ← Contas
-      </Link>
+      <BackToAccountsLink />
 
-      <CardForm scopeLabel={scopeLabel} />
+      <CardForm mode="create" description={`Vai entrar em ${scopeLabel}.`} />
     </div>
   );
 }

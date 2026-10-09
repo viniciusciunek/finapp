@@ -13,3 +13,22 @@ export function formatBrl(cents: number): string {
     currency: "BRL",
   }).format(cents / 100);
 }
+
+/**
+ * Centavos no formato que se **digita** num campo: `123456` → `1234,56`.
+ *
+ * Diferente do `formatBrl`: sem "R$" e sem separador de milhar, porque o texto
+ * volta para dentro de um campo de formulário e precisa ser fácil de corrigir.
+ * É o inverso exato de `parseCentsFromText` — os dois são testados juntos para
+ * não se desencontrarem.
+ *
+ * Aritmética inteira, sem `toFixed`: a regra de dinheiro vale também na saída.
+ */
+export function formatCentsForInput(cents: number): string {
+  const sign = cents < 0 ? "-" : "";
+  const absolute = Math.abs(cents);
+  const reais = Math.trunc(absolute / 100);
+  const centavos = String(absolute % 100).padStart(2, "0");
+
+  return `${sign}${reais},${centavos}`;
+}

@@ -99,14 +99,19 @@ async function AccountsContent() {
         ) : null}
 
         {accountsResult.accounts.length > 0 ? (
-          <ul className="divide-y rounded-xl border">
+          <ul className="divide-y overflow-hidden rounded-xl border">
             {accountsResult.accounts.map((account) => (
-              <li key={account.id} className="p-3">
-                <p className="text-sm font-medium">{account.name}</p>
-                <p className="text-muted-foreground text-xs">
-                  {labelForAccountType(account.type)}
-                  {account.bank ? ` · ${account.bank}` : ""}
-                </p>
+              <li key={account.id}>
+                <Link
+                  href={`/contas/${account.id}/editar`}
+                  className="hover:bg-muted/50 block p-3"
+                >
+                  <p className="text-sm font-medium">{account.name}</p>
+                  <p className="text-muted-foreground text-xs">
+                    {labelForAccountType(account.type)}
+                    {account.bank ? ` · ${account.bank}` : ""}
+                  </p>
+                </Link>
               </li>
             ))}
           </ul>
@@ -132,16 +137,21 @@ async function AccountsContent() {
         ) : null}
 
         {cardsResult.cards.length > 0 ? (
-          <ul className="divide-y rounded-xl border">
+          <ul className="divide-y overflow-hidden rounded-xl border">
             {cardsResult.cards.map((card) => (
-              <li key={card.id} className="p-3">
-                <p className="text-sm font-medium">{card.name}</p>
-                <p className="text-muted-foreground text-xs">
-                  Fecha dia {card.closingDay} · vence dia {card.dueDay}
-                  {card.limitCents === null
-                    ? ""
-                    : ` · limite ${formatBrl(card.limitCents)}`}
-                </p>
+              <li key={card.id}>
+                <Link
+                  href={`/contas/cartoes/${card.id}/editar`}
+                  className="hover:bg-muted/50 block p-3"
+                >
+                  <p className="text-sm font-medium">{card.name}</p>
+                  <p className="text-muted-foreground text-xs">
+                    Fecha dia {card.closingDay} · vence dia {card.dueDay}
+                    {card.limitCents === null
+                      ? ""
+                      : ` · limite ${formatBrl(card.limitCents)}`}
+                  </p>
+                </Link>
               </li>
             ))}
           </ul>

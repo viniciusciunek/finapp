@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { Suspense } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
@@ -7,6 +6,7 @@ import { getScope } from "@/server/scope";
 import { requireHousehold } from "@/server/session";
 
 import { AccountForm } from "../_components/account-form";
+import { BackToAccountsLink } from "../_components/back-link";
 
 export const metadata: Metadata = {
   title: "Nova conta",
@@ -50,14 +50,9 @@ async function NewAccountContent() {
 
   return (
     <div className="space-y-4">
-      <Link
-        href="/contas"
-        className="text-muted-foreground hover:text-foreground text-sm"
-      >
-        ← Contas
-      </Link>
+      <BackToAccountsLink />
 
-      <AccountForm scopeLabel={scopeLabel} />
+      <AccountForm mode="create" description={`Vai entrar em ${scopeLabel}.`} />
     </div>
   );
 }

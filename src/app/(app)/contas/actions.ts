@@ -6,8 +6,9 @@ import { z } from "zod";
 import { ACCOUNT_TYPES } from "@/domain/account";
 import { BILLING_DAY_MAX, BILLING_DAY_MIN } from "@/domain/credit-card";
 import { parseCentsFromText } from "@/domain/money";
-import { createAccount } from "@/server/accounts";
-import { createCreditCard } from "@/server/credit-cards";
+import { isUuid } from "@/domain/uuid";
+import { createAccount, updateAccount } from "@/server/accounts";
+import { createCreditCard, updateCreditCard } from "@/server/credit-cards";
 import { getScope } from "@/server/scope";
 import { requireHousehold } from "@/server/session";
 
@@ -43,9 +44,6 @@ export async function createAccountAction(
   _previousState: AccountFormState,
   formData: FormData,
 ): Promise<AccountFormState> {
-  const context = await requireHousehold();
-  const scope = await getScope();
-
   const parsed = accountSchema.safeParse({
     name: formData.get("name"),
     bank: formData.get("bank"),
@@ -58,6 +56,13 @@ export async function createAccountAction(
         parsed.error.issues[0]?.message ?? "Verifique os dados informados.",
     };
   }
+
+  // Sessão e escopo **depois** da validação, de propósito: um erro de
+  // digitação não deve custar uma ida ao banco — e, no Next 16, mexer no
+  // cliente do Supabase dentro da action sela os cookies da requisição, o que
+  // faz a re-renderização da resposta de erro perder o cabeçalho.
+  const context = await requireHousehold();
+  const scope = await getScope();
 
   const { error } = await createAccount(
     { scope, userId: context.userId, householdId: context.household.id },
@@ -102,9 +107,6 @@ export async function createCreditCardAction(
   _previousState: AccountFormState,
   formData: FormData,
 ): Promise<AccountFormState> {
-  const context = await requireHousehold();
-  const scope = await getScope();
-
   const parsed = cardSchema.safeParse({
     name: formData.get("name"),
     closingDay: formData.get("closingDay"),
@@ -114,7 +116,8 @@ export async function createCreditCardAction(
 
   if (!parsed.success) {
     return {
-      error: parsed.error.issues[0]?.message ?? "Verifique os dados informados.",
+      error:
+        parsed.error.issues[0]?.message ?? "Verifique os dados informados.",
     };
   }
 
@@ -127,6 +130,10 @@ export async function createCreditCardAction(
     return { error: "Confira o limite: use algo como 1.234,56." };
   }
 
+  // Sessão e escopo só depois de tudo válido (ver `createAccountAction`).
+  const context = await requireHousehold();
+  const scope = await getScope();
+
   const { error } = await createCreditCard(
     { scope, userId: context.userId, householdId: context.household.id },
     {
@@ -136,6 +143,101 @@ export async function createCreditCardAction(
       limitCents,
     },
   );
+
+  if (error) {
+    return { error };
+  }
+
+  redirect("/contas");
+}
+
+/** Id vindo da URL ou de um campo escondido: entra como texto, sai validado. */
+const entityId = z
+  .string()
+  .refine(isUuid, "Este endereço não é válido. Volte para a lista de contas.");
+
+const updateAccountSchema = accountSchema.extend({ id: entityId });
+
+/**
+ * Salva as mudanças da conta.
+ *
+ * Não recebe escopo nem dono: o banco recusa mudá-los depois da criação (D20),
+ * então nem existe campo para isso no formulário. Quem garante que a conta é
+ * visível para quem está pedindo é o RLS — e, se não for, a atualização atinge
+ * zero linhas e vira "Esta conta não existe mais."
+ */
+export async function updateAccountAction(
+  _previousState: AccountFormState,
+  formData: FormData,
+): Promise<AccountFormState> {
+  const parsed = updateAccountSchema.safeParse({
+    id: formData.get("id"),
+    name: formData.get("name"),
+    bank: formData.get("bank"),
+    type: formData.get("type"),
+  });
+
+  if (!parsed.success) {
+    return {
+      error:
+        parsed.error.issues[0]?.message ?? "Verifique os dados informados.",
+    };
+  }
+
+  // Sessão depois da validação (ver `createAccountAction`).
+  await requireHousehold();
+
+  const { error } = await updateAccount(parsed.data.id, {
+    name: parsed.data.name,
+    bank: parsed.data.bank === "" ? null : parsed.data.bank,
+    type: parsed.data.type,
+  });
+
+  if (error) {
+    return { error };
+  }
+
+  redirect("/contas");
+}
+
+const updateCardSchema = cardSchema.extend({ id: entityId });
+
+/** Salva as mudanças do cartão — mesmas regras da criação, mais o id. */
+export async function updateCreditCardAction(
+  _previousState: AccountFormState,
+  formData: FormData,
+): Promise<AccountFormState> {
+  const parsed = updateCardSchema.safeParse({
+    id: formData.get("id"),
+    name: formData.get("name"),
+    closingDay: formData.get("closingDay"),
+    dueDay: formData.get("dueDay"),
+    limit: formData.get("limit"),
+  });
+
+  if (!parsed.success) {
+    return {
+      error:
+        parsed.error.issues[0]?.message ?? "Verifique os dados informados.",
+    };
+  }
+
+  const limitCents =
+    parsed.data.limit === "" ? null : parseCentsFromText(parsed.data.limit);
+
+  if (parsed.data.limit !== "" && limitCents === null) {
+    return { error: "Confira o limite: use algo como 1.234,56." };
+  }
+
+  // Sessão depois da validação (ver `createAccountAction`).
+  await requireHousehold();
+
+  const { error } = await updateCreditCard(parsed.data.id, {
+    name: parsed.data.name,
+    closingDay: parsed.data.closingDay,
+    dueDay: parsed.data.dueDay,
+    limitCents,
+  });
 
   if (error) {
     return { error };

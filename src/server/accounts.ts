@@ -1,4 +1,5 @@
 import { ownershipForScope, parseScope, type Scope } from "@/domain/scope";
+import { isUuid } from "@/domain/uuid";
 import { createClient } from "@/lib/supabase/server";
 
 import { toUserMessage } from "./errors";
@@ -88,6 +89,12 @@ export async function listAccounts(
 export async function getAccount(
   accountId: string,
 ): Promise<{ account: Account | null; error: string | null }> {
+  // Id que nem tem forma de id é "não encontrada" — e não um erro de cast do
+  // Postgres, que faria a tela mentir sobre o motivo (`isUuid`).
+  if (!isUuid(accountId)) {
+    return { account: null, error: null };
+  }
+
   const supabase = await createClient();
 
   const { data, error } = await supabase

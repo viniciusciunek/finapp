@@ -13,33 +13,63 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { BILLING_DAY_MAX, BILLING_DAY_MIN } from "@/domain/credit-card";
+import { formatCentsForInput } from "@/lib/format";
+import type { CardValues } from "@/server/credit-cards";
 
-import { createCreditCardAction, type AccountFormState } from "../actions";
+import {
+  createCreditCardAction,
+  updateCreditCardAction,
+  type AccountFormState,
+} from "../actions";
 
 const initialState: AccountFormState = { error: null };
 
+/** Mesma união do formulário de conta: no modo `edit` o id é obrigatório. */
+type CardFormProps =
+  | { mode: "create"; description: string }
+  | {
+      mode: "edit";
+      description: string;
+      id: string;
+      initialValues: CardValues;
+    };
+
 /**
- * Formulário de cartão de crédito.
+ * Formulário de cartão — criar e editar, um só (mesmo desenho do de conta).
  *
- * Mesmo desenho do formulário de conta (e o mesmo estado de erro): o
- * `scopeLabel` é só exibição — o escopo de verdade é lido no servidor, dentro
- * da Server Action.
+ * O limite vai e volta como **texto**: acaba de ser digitado ("1.234,56") e
+ * volta no formato em que se digita, via `formatCentsForInput`. O banco guarda
+ * centavos inteiros nos dois sentidos.
  */
-export function CardForm({ scopeLabel }: { scopeLabel: string }) {
+export function CardForm(props: CardFormProps) {
+  const isCreate = props.mode === "create";
+  const initial = props.mode === "edit" ? props.initialValues : null;
+
   const [state, formAction, isPending] = useActionState(
-    createCreditCardAction,
+    isCreate ? createCreditCardAction : updateCreditCardAction,
     initialState,
   );
+
+  // Campo vazio e "sem limite" são a mesma coisa aqui (o banco também trata
+  // assim: `limit_cents` nulo).
+  const limitText =
+    initial?.limitCents === null || initial?.limitCents === undefined
+      ? ""
+      : formatCentsForInput(initial.limitCents);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Novo cartão</CardTitle>
-        <CardDescription>Vai entrar em {scopeLabel}.</CardDescription>
+        <CardTitle>{isCreate ? "Novo cartão" : "Editar cartão"}</CardTitle>
+        <CardDescription>{props.description}</CardDescription>
       </CardHeader>
 
       <CardContent>
         <form action={formAction} className="space-y-4">
+          {props.mode === "edit" ? (
+            <input type="hidden" name="id" value={props.id} />
+          ) : null}
+
           <div className="space-y-2">
             <Label htmlFor="card-name">Nome</Label>
             <Input
@@ -50,6 +80,7 @@ export function CardForm({ scopeLabel }: { scopeLabel: string }) {
               maxLength={60}
               required
               disabled={isPending}
+              defaultValue={initial?.name ?? ""}
             />
           </div>
 
@@ -63,7 +94,7 @@ export function CardForm({ scopeLabel }: { scopeLabel: string }) {
                 inputMode="numeric"
                 min={BILLING_DAY_MIN}
                 max={BILLING_DAY_MAX}
-                defaultValue={BILLING_DAY_MAX}
+                defaultValue={initial?.closingDay ?? BILLING_DAY_MAX}
                 required
                 disabled={isPending}
               />
@@ -78,7 +109,7 @@ export function CardForm({ scopeLabel }: { scopeLabel: string }) {
                 inputMode="numeric"
                 min={BILLING_DAY_MIN}
                 max={BILLING_DAY_MAX}
-                defaultValue={10}
+                defaultValue={initial?.dueDay ?? 10}
                 required
                 disabled={isPending}
               />
@@ -95,6 +126,7 @@ export function CardForm({ scopeLabel }: { scopeLabel: string }) {
               placeholder="1.234,56"
               maxLength={20}
               disabled={isPending}
+              defaultValue={limitText}
             />
           </div>
 
@@ -105,7 +137,13 @@ export function CardForm({ scopeLabel }: { scopeLabel: string }) {
           ) : null}
 
           <Button type="submit" className="w-full" disabled={isPending}>
-            {isPending ? "Criando..." : "Criar cartão"}
+            {isPending
+              ? isCreate
+                ? "Criando..."
+                : "Salvando..."
+              : isCreate
+                ? "Criar cartão"
+                : "Salvar mudanças"}
           </Button>
         </form>
       </CardContent>
