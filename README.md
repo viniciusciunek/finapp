@@ -7,7 +7,7 @@ Sistema de finanças pessoais e da família para o Vinícius e a Isabelle — su
 - **Ordem de construção (fatias):** [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - **Histórico detalhado do que foi feito e por quê:** [`docs/BUILD_LOG.md`](docs/BUILD_LOG.md)
 
-> **Estado atual:** Fatia 0 (Fundação) concluída. Fatia 1 (Login e família) em andamento — o **banco já está pronto e validado** (família, convites e RLS com teste de isolamento); as telas de cadastro, onboarding e família vêm na sequência.
+> **Estado atual:** Fatia 0 (Fundação) concluída. Fatia 1 (Login e família) em andamento — **banco e camada de servidor prontos e validados** (família, convites, RLS com teste de isolamento); faltam as telas de cadastro, onboarding e família.
 
 ## Stack
 
@@ -64,6 +64,7 @@ Sem um usuário cadastrado não dá para entrar: crie um em **Supabase → Authe
 | `npm run test:rls` | Testes de **integração** (isolamento entre usuários) contra um Supabase de verdade — precisa de credenciais |
 | `npm run format` | Formata tudo com Prettier |
 | `npm run format:check` | Só verifica a formatação (usado no CI) |
+| `npm run db:types` | Regenera os tipos do banco (`src/lib/supabase/database.types.ts`) a partir do schema |
 | `python3 scripts/generate-icons.py` | Regera os ícones do PWA |
 
 ## Banco de dados
@@ -89,6 +90,9 @@ npx supabase migration new nome_da_migration
 | Arquivo | O que cria |
 |---|---|
 | `20261008180810_identity_and_households.sql` | `profiles`, `user_settings`, `households`, `household_members`, `household_invites`, as funções de associação (`create_household`, `accept_household_invite`, `leave_household`) e as **10 policies de RLS** |
+| `20261009141956_backfill_identity_for_existing_users.sql` | Cria `profiles`/`user_settings` para contas que existiam antes do trigger de cadastro (idempotente) |
+
+> Depois de mudar o schema e aplicar a migration, rode `npm run db:types` para os tipos acompanharem.
 
 ### Testar o banco localmente (opcional, recomendado)
 

@@ -40,8 +40,9 @@ export async function signInAction(
   const { error } = await signInWithPassword(parsed.data);
 
   if (error) {
-    // Mensagem genérica de propósito: não revela se o e-mail existe na base.
-    return { error: "E-mail ou senha incorretos." };
+    // A mensagem já vem traduzida de `src/server/auth.ts` e continua genérica
+    // quando as credenciais são inválidas — não revela se o e-mail existe.
+    return { error };
   }
 
   // `redirect` lança internamente; o retorno abaixo nunca é alcançado.

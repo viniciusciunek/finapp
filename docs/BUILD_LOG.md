@@ -8,16 +8,14 @@
 
 ## Status atual
 
-- **Fatia em andamento:** **1 — Login e família** (`docs/ROADMAP.md`) — **fase 1 (banco) concluída e validada**; faltam as fases 2 a 5
-- **Último passo concluído:** `P15` — Migration de identidade/família com RLS, funções de associação e teste de isolamento (21 testes unitários + 15 de integração passando)
-- **Próximo passo:** Fase 2 — camada de servidor (`src/server/session.ts`, `src/server/households.ts`, `signUp` em `src/server/auth.ts`)
+- **Fatia em andamento:** **1 — Login e família** — fases **1 (banco)** e **2 (servidor)** concluídas; faltam 3 (telas), 4 (CI) e 5 (validação)
+- **Último passo concluído:** `P16` — Camada de servidor (tipos do banco, contexto de sessão, família/convites, cadastro) + migration de backfill de identidade
+- **Próximo passo:** Fase 3 — telas (cadastro, onboarding, shell com navegação, família, conta)
 - **Pendências manuais (usuário):**
-  - [x] ~~Informar a URL do repositório GitHub e empurrar~~ — feito: `origin` = `github.com/viniciusciunek/finapp`, local e remoto em dia
-  - [x] ~~Preencher o `.env.local`~~ — feito; projeto Supabase `czqyiuztionqtqanmbep` no ar
-  - [ ] **Desligar a confirmação de e-mail**: Supabase → Authentication → Sign In / Providers → Email → **"Confirm email" DESLIGADO** (senão o cadastro não entra direto)
-  - [ ] `npx supabase login` + `npx supabase link --project-ref czqyiuztionqtqanmbep` (pedem segredos — só o usuário digita)
-  - [ ] **Aplicar a migration na nuvem**: `npx supabase db push` (a migration já foi validada no Supabase local)
-  - [ ] **Rodar o teste de RLS contra a nuvem**: `npm run test:rls` (depois do `db push`)
+  - [x] ~~Desligar a confirmação de e-mail~~ — feito (`npm run test:rls` passou contra a nuvem)
+  - [x] ~~`supabase login` + `link`~~ — feito (projeto `czqyiuztionqtqanmbep` vinculado)
+  - [x] ~~Aplicar a migration na nuvem~~ — feito (`20261008180810` local = remoto)
+  - [ ] **Aplicar a migration de backfill** (`20261009141956`): `npx supabase db push`
   - [ ] Deploy na Vercel (adiado pelo usuário)
 
 ---
@@ -936,6 +934,88 @@ npm test                # 21 testes passando
 - `src/integration/rls-isolation.integration.test.ts` (novo)
 - `vitest.integration.config.mts` (novo); `vitest.config.mts` e `package.json` (editados)
 - `docs/DOMAIN.md` — §2 (entidades), §3.1 e §3.2 (privacidade e funções), §4.10 (regras da família/convite) e §5 (testes 8 e 9)
+
+---
+
+### P16 — Fatia 1, fase 2: camada de servidor · 2026-10-09
+
+**Objetivo da fase:** dar ao app uma camada única de acesso a dados — tipos do banco, contexto de sessão, operações de família/convite e cadastro — antes de escrever as telas.
+
+**Entrega em uma frase:** as páginas vão poder perguntar "quem está logado?", "já tem família?" e "quais os membros?" chamando uma função, sem falar com o Supabase diretamente e sem repetir regra de nada.
+
+**1. Tipos gerados do banco (`npm run db:types`)**
+
+```bash
+npx supabase gen types typescript --linked > src/lib/supabase/database.types.ts
+```
+
+- **Por quê:** sem isso, toda consulta devolvia tipo solto e cada acesso a coluna exigia conversão manual — exatamente onde erro de digitação vira bug em produção. Com os tipos, tabelas, colunas e funções são conhecidas pelo TypeScript.
+- Os clientes (`src/lib/supabase/client.ts` e `server.ts`) passaram a ser `createClient<Database>`.
+- O arquivo gerado entrou no `.prettierignore`. **Não é detalhe:** o `format:check` do CI falharia, porque o gerador não formata como o Prettier.
+- Script `db:types` criado para regenerar quando o schema mudar (fácil de esquecer — daí o script em vez do comando solto).
+
+**2. Contexto de sessão — `src/server/session.ts`**
+
+`getSessionContext()` responde as perguntas de toda tela privada e está embrulhado em `cache()` do React: o layout e a página chamam, e o banco é consultado **uma vez por requisição**.
+
+Sobre ele, duas funções que as telas usam direto:
+- `requireSession()` → sem sessão, manda para `/login`;
+- `requireHousehold()` → sem família, manda para `/onboarding`.
+
+Assim a regra de "para onde ir" fica em um lugar só, em vez de repetida em cada página.
+
+**3. Módulos puros novos (com teste)**
+
+| Arquivo | Por quê |
+|---|---|
+| `src/domain/scope.ts` | O escopo (pessoal/família) vem de **cookie**, que é entrada controlada pelo usuário: precisa ser validado. `parseScope` cai no padrão quando recebe lixo. |
+| `src/domain/household.ts` | O banco garante `role in ('owner','member')`, mas o tipo gerado é `string`. `parseHouseholdRole` converte **para baixo**: desconhecido vira `member`, nunca `owner`. Promover alguém a dono por acidente seria falha de autorização. |
+| `src/lib/auth-messages.ts` | O Supabase Auth responde em inglês e a interface é pt-BR. O caso desconhecido vira texto genérico — **não vaza jargão técnico** para o usuário. |
+
+**4. Acesso a dados — `src/server/households.ts`**
+
+`createHousehold`, `joinHouseholdWithCode`, `leaveHousehold`, `listHouseholdMembers`, `createInvite`, `listActiveInvites`, `revokeInvite`.
+
+- O **código do convite é gerado no servidor** com `crypto.randomInt` (não `Math.random`), com nova tentativa quando o `UNIQUE` acusa colisão.
+- `listHouseholdMembers` faz **duas consultas**: `household_members.user_id` aponta para `auth.users`, não para `profiles`, então o PostgREST não consegue embutir o perfil. A RLS de `profiles` libera a leitura de quem divide a família.
+- Nenhuma autorização mora aqui — quem decide é o RLS. O comentário no topo do arquivo avisa isso em letras grandes.
+
+**5. Estratégia de mensagem de erro (vale para o projeto todo)**
+
+Erro do banco **não** é repassado direto para a tela. Só mostramos a mensagem quando o código de erro está numa lista fechada — `22023`, `23505`, `42501` — porque esses são os erros que **nós** levantamos, em português e sem jargão ("Código de convite inválido", "Você já faz parte de uma família"). Todo o resto (conexão, `PGRST`, permissão inesperada) vira uma mensagem padrão: erro técnico não ajuda o usuário e pode expor detalhe.
+
+**6. Cadastro — `signUpWithPassword`**
+
+Devolve `{ error, needsEmailConfirmation }`. O nome vai em `options.data`, de onde o trigger `handle_new_user` o lê para criar o perfil. A tela consegue tratar os dois cenários: com a confirmação de e-mail ligada, mostra "confirme seu e-mail" em vez de deixar a pessoa presa sem explicação.
+
+**Melhoria de quebra-galho no login:** antes, **qualquer** erro virava "E-mail ou senha incorretos." — inclusive "confirme seu e-mail", que deixava o usuário sem entender o que fazer. Agora a mensagem traduzida é usada, e o caso de credenciais inválidas continua genérico (não revela se o e-mail existe).
+
+**7. Migration de backfill (`20261009141956`) — problema real encontrado no caminho**
+
+O trigger `handle_new_user` só dispara em **INSERT novo** em `auth.users`. Quem já tinha conta quando a migration anterior foi aplicada — caso do usuário de teste criado pelo painel na Fatia 0 — ficou **sem** `profiles` e sem `user_settings`, e o app espera essas linhas.
+
+Migration idempotente (`where not exists`) que cria o que falta, com nome derivado do e-mail. **Verificado de verdade:** apaguei os 2 perfis e as 2 preferências do banco local, rodei o SQL e as 4 linhas voltaram.
+
+**Validação executada**
+
+```bash
+npx supabase db reset   # aplica as DUAS migrations do zero, sem erro
+npm run test:rls        # 15 testes de isolamento passando
+npm test                # 33 testes unitários passando (5 arquivos)
+npm run format:check    # "All matched files use Prettier code style!"
+npm run lint            # sem erros
+npm run typecheck       # sem erros (a tipagem do join foi aceita)
+npm run build           # ✓
+```
+
+**Arquivos desta fase**
+
+- `src/lib/supabase/database.types.ts` (novo, gerado) + clientes tipados
+- `src/server/session.ts` (novo) e `src/server/households.ts` (novo)
+- `src/server/auth.ts` (cadastro + mensagens traduzidas) e `src/app/login/actions.ts` (usa a mensagem traduzida)
+- `src/domain/scope.ts`, `src/domain/household.ts`, `src/lib/auth-messages.ts` (+ os 3 arquivos de teste)
+- `supabase/migrations/20261009141956_backfill_identity_for_existing_users.sql` (novo)
+- `package.json` (scripts `db:types`), `.prettierignore`
 
 ---
 

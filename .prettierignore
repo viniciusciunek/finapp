@@ -8,6 +8,9 @@ build/
 # dependências
 node_modules/
 
+# arquivos gerados por ferramentas (não formatar à mão)
+src/lib/supabase/database.types.ts
+
 # arquivos gerados pelo PWA (Serwist)
 public/sw.js
 public/sw.js.map
