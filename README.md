@@ -44,6 +44,17 @@ npm run dev
 
 Não é preciso criar usuário na mão: a tela de **`/signup`** cria a conta em segundos. Depois de entrar, a pessoa **cria a família** ou usa um **código de convite** recebido da outra.
 
+### Testar fluxo de cadastro sem sujar o projeto real
+
+O `npm run dev` fala com o projeto do `.env.local` — o de verdade. Para testar cadastro, convite e afins sem criar conta real, suba o Supabase local e use o outro comando:
+
+```bash
+npx supabase start     # uma vez (usa Docker)
+npm run dev:local      # o app passa a apontar para http://127.0.0.1:54321
+```
+
+O `dev:local` troca apenas as variáveis de ambiente do processo — o `.env.local` fica intacto.
+
 ### Configuração necessária no painel do Supabase
 
 | O quê | Onde | Por quê |
@@ -66,17 +77,19 @@ A alternância no topo (**Pessoal / Família**) troca a visão ativa e a escolha
 
 | Comando | O que faz |
 |---|---|
-| `npm run dev` | Servidor de desenvolvimento |
+| `npm run dev` | Servidor de desenvolvimento (usa o projeto do `.env.local`) |
+| `npm run dev:local` | Servidor de desenvolvimento apontando para o **Supabase local** — use este para testar cadastro e convite |
 | `npm run build` | Build de produção |
 | `npm start` | Sobe o build de produção |
 | `npm run lint` | ESLint |
 | `npm run typecheck` | Gera os tipos de rota do Next (`next typegen`) e roda o `tsc` |
 | `npm test` | Testes unitários (Vitest, executa uma vez e sai) |
 | `npm run test:watch` | Testes em modo watch |
-| `npm run test:rls` | Testes de **integração** (isolamento entre usuários) contra um Supabase de verdade — precisa de credenciais |
+| `npm run test:rls` | Testes de **integração** (isolamento entre usuários). Rodam no Supabase local e **recusam** qualquer outro alvo sem confirmação |
 | `npm run format` | Formata tudo com Prettier |
 | `npm run format:check` | Só verifica a formatação (usado no CI) |
 | `npm run db:types` | Regenera os tipos do banco (`src/lib/supabase/database.types.ts`) a partir do schema |
+| `npm run db:cleanup` | Lista (e com `-- --delete`, apaga) contas de teste que tenham ido parar num projeto — ver abaixo |
 | `python3 scripts/generate-icons.py` | Regera os ícones do PWA |
 
 ## Banco de dados
@@ -121,13 +134,37 @@ npx supabase stop       # derruba os contêineres
 A regra do projeto é que **nenhum usuário leia dado pessoal de outro** — e isso é verificado por teste, não por leitura de código:
 
 ```bash
-npm run test:rls        # usa o Supabase configurado no .env.local
-
-# ou apontando para o Supabase local:
-SUPABASE_TEST_URL=http://127.0.0.1:54321 SUPABASE_TEST_KEY=<publishable key do supabase start> npm run test:rls
+npx supabase start     # o alvo padrão é o Supabase local
+npm run test:rls
 ```
 
-O teste cria **uma única vez** (e reaproveita nas execuções seguintes) dois usuários `rls-teste+…@example.com` e uma família "Família de teste (RLS)". No CI ele roda contra um Supabase local que sobe **dentro do runner** (job `isolation`) — nunca contra o projeto da nuvem, e sem nenhum segredo configurado. Para limpar o resíduo de uma execução local apontada para a nuvem, apague a família de teste e depois os dois usuários no painel do Supabase.
+O teste **cria dados**: dois usuários `rls-teste+…@example.com` e a família "Família de teste (RLS)". Por isso ele só roda contra bancos **descartáveis** — apontar para qualquer outro host falha antes de rodar um único teste:
+
+```bash
+# bloqueado, com instruções na tela:
+SUPABASE_TEST_URL=https://<ref>.supabase.co npm run test:rls
+
+# contra um projeto real só com confirmação explícita:
+RLS_ALLOW_REMOTE=true SUPABASE_TEST_URL=https://<ref>.supabase.co npm run test:rls
+```
+
+Essa trava existe por um motivo concreto: o padrão antigo caía no `.env.local` — o projeto de verdade — e criava contas reais lá. Elas só saem pelo painel, porque apagar usuário exige a chave secreta, que o teste não usa.
+
+No CI o teste roda contra um Supabase que sobe **dentro do runner** (job `isolation`), sem nenhum segredo configurado.
+
+### Limpar contas de teste que tenham subido para um projeto
+
+```bash
+SUPABASE_URL=https://<ref>.supabase.co \
+SUPABASE_SECRET_KEY=sb_secret_... \
+npm run db:cleanup                 # só lista o que encontrou
+
+npm run db:cleanup -- --delete     # lista e apaga
+```
+
+- Só considera os e-mails da lista `TEST_EMAILS` em `scripts/cleanup-test-data.mjs` — **anote lá** toda conta de teste nova, senão a limpeza não a encontra.
+- Família que tenha alguém fora dessa lista é **pulada**, não apagada: apagar levaria junto o vínculo de uma pessoa de verdade.
+- A chave secreta (Dashboard → Project Settings → API Keys) ignora o RLS e **nunca** entra no repositório: ela vai na linha de comando, vale para aquela execução e não fica registrada em lugar nenhum.
 
 ## Estrutura
 
@@ -145,7 +182,7 @@ src/
 ├── server/              Acesso a dados (as páginas/actions chamam daqui)
 └── proxy.ts             (na raiz de src/) Renovação da sessão a cada requisição
 supabase/                Configuração do CLI e migrations
-scripts/                 Geração de assets (ícones)
+scripts/                 Utilitários: ícones, `dev:local` e limpeza de contas de teste
 ```
 
 `src/proxy.ts` é o antigo `middleware.ts`, renomeado no Next 16.

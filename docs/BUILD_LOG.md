@@ -9,7 +9,7 @@
 ## Status atual
 
 - **Fatia em andamento:** **1 — Login e família** — **concluída** (fases 1 a 5). O único item em aberto é o deploy, adiado pelo usuário
-- **Último passo concluído:** `P19` — Fase 5: limpeza, validação final e fechamento da fatia
+- **Último passo concluído:** `P20` — Blindagem contra dados de teste no projeto real (trava no `test:rls`, `dev:local`, `db:cleanup`)
 - **Próximo passo:** Fatia 2 — contas e cartões (`docs/ROADMAP.md`)
 - **Pendências manuais (usuário):**
   - [x] ~~Desligar a confirmação de e-mail~~ — feito (`npm run test:rls` passou contra a nuvem)
@@ -39,6 +39,8 @@
 | D13 | Preferência de visão (pessoal/família) em **cookie `httpOnly`**, validado por `parseScope` | É preferência de navegação, não dado de negócio: cookie faz a escolha sobreviver à navegação sem poluir a URL. `httpOnly` porque só o servidor lê; `secure` só em produção, senão o navegador recusa em `localhost`; valor sempre passa por `parseScope` antes de ser gravado (cookie é entrada do usuário) | Parâmetro na URL (`?scope=`) — feio e some ao navegar; `localStorage` — exigiria JavaScript no cliente e permitiria divergência com o servidor |
 | D14 | **Não existe cliente Supabase no navegador** (`src/lib/supabase/client.ts` foi removido no `P19`) | Todo acesso a dado passa por `src/server/` e a regra do projeto diz que a interface nunca fala com o banco. Um cliente de browser disponível é convite a furar essa regra — e não havia nenhum uso real | Manter o cliente "para quando precisar": código sem uso que contradiz a arquitetura do próprio projeto |
 | D15 | Testes de isolamento (RLS) **rodam no CI**, contra um Supabase que sobe **dentro do runner** | A regra "nenhum usuário lê dado de outro" é a mais importante do projeto e não podia depender de alguém lembrar de rodar um comando na mão. Rodar contra a nuvem exigiria guardar credenciais no GitHub e sujaria o projeto real a cada push | Deixar fora do CI (era o estado anterior, justificado por "o CI não tem segredos"); apontar o CI para a nuvem com segredos guardados |
+| D16 | Testes de integração rodam **só contra banco descartável**: o alvo padrão é o Supabase local e qualquer outro host **falha** sem `RLS_ALLOW_REMOTE=true` | O padrão anterior caía no `.env.local` — o projeto real — e um `npm run test:rls` desavisado criava contas de verdade lá (`P20`). Falhar cedo e alto é melhor do que confiar em alguém lembrar de apontar a variável | Continuar lendo o `.env.local` e apenas imprimir um aviso (aviso se ignora); exigir a variável sempre, sem alvo padrão (atrito desnecessário para o caso comum) |
+| D17 | Contas de teste ganham **script de limpeza** (`npm run db:cleanup`), que **não apaga nada sem `--delete`** e **pula** família com alguém fora da lista de teste | Apagar usuário exige a chave secreta, que o projeto não guarda: quando algo escapa, a alternativa é clicar no painel. Como a ferramenta é destrutiva, o padrão é listar; e apagar uma família que tem pessoa de verdade dentro é decisão humana, não da máquina | Deixar a limpeza manual pelo painel; apagar por padrão; apagar qualquer família criada por conta de teste, mesmo com gente de fora |
 
 ---
 
@@ -1274,6 +1276,71 @@ O ensaio do job `isolation` (descrito no `P18`) foi refeito depois da limpeza, c
 - `src/server/auth.ts` (remoção de `getAuthenticatedUser`), `src/lib/supabase/client.ts` (removido)
 - `src/app/login/actions.ts` e `src/app/(app)/loading.tsx` (órfãos removidos)
 - `docs/BUILD_LOG.md` (este registro), `README.md` (estado e CI)
+
+---
+
+### P20 — Nada de teste no projeto real: trava, atalho e limpeza · 2026-10-09
+
+**Por que este passo existe (o incidente)**
+
+O usuário reclamou de ter de apagar contas no painel do Supabase. Fui investigar e a causa era minha — melhor dizendo, do **padrão** que eu tinha deixado:
+
+1. `npm run test:rls` resolvia o alvo em `SUPABASE_TEST_URL` → `.env.local`. O `.env.local` aponta para o projeto **de verdade** (`https://czqyiuztionqtqanmbep.supabase.co`), então um comando de teste desavisado criava contas reais lá: os `rls-teste+…@example.com` e a "Família de teste (RLS)".
+2. O E2E manual do `P17` (navegador, `npm run dev`) rodou contra esse mesmo alvo. As contas `teste.fase3@example.com` e `teste.fase3.b@example.com`, a família "Nossa casa" e o convite `3TKTZH6QTQ` nasceram no banco real. Eu deveria ter subido o dev server apontando para o Supabase local e não fiz.
+
+E o resíduo não se limpa sozinho: **apagar usuário exige a chave secreta**, que os testes não usam (de propósito). A saída pelo painel é manual — então o trabalho certo é **prevenir**, e dar uma ferramenta para quando algo escapar.
+
+**1. A trava: alvo padrão é o banco descartável**
+
+`vitest.integration.config.mts` deixou de ler o `.env.local` para decidir o alvo. Agora:
+
+- alvo padrão = Supabase local (`http://127.0.0.1:54321`), com a chave publicável local embutida — que não é segredo (é o valor fixo que o CLI usa em qualquer máquina);
+- se `SUPABASE_TEST_URL` apontar para host que não seja `127.0.0.1`, `localhost` ou `[::1]`, a configuração **lança erro antes de rodar um único teste**, com a explicação e as duas saídas possíveis;
+- rodar contra um projeto real continua possível, mas exige `RLS_ALLOW_REMOTE=true` — e nesse caso sai um aviso do que vai ser criado lá.
+
+A decisão de **falhar** em vez de avisar é o ponto: aviso em saída de comando é exatamente o que ninguém lê.
+
+**2. `npm run dev:local` — o atalho para testar fluxo no navegador**
+
+`scripts/dev-local.mjs` sobe o `next dev` com `NEXT_PUBLIC_SUPABASE_URL` e a chave local injetadas no processo. Variável de ambiente do shell tem precedência sobre os arquivos `.env*` do Next, então o alvo muda **sem tocar no `.env.local`** — que continua servindo o projeto real para o desenvolvimento normal.
+
+O script é um arquivo (e não uma linha de env no `package.json`) por dois motivos: funciona em qualquer shell, e imprime o aviso do que está fazendo antes de subir.
+
+**3. `npm run db:cleanup` — a rede de segurança**
+
+`scripts/cleanup-test-data.mjs` encontra e apaga contas de teste que tenham ido parar num projeto. É uma ferramenta **destrutiva**, então o desenho protege antes de agir:
+
+- sem `--delete` **não apaga nada** — só lista;
+- só considera e-mails da lista `TEST_EMAILS` (e o cabeçalho do arquivo diz para anotar conta nova ali);
+- imprime o alvo (URL) e o que encontrou antes de mexer;
+- **família com alguém fora da lista de teste é pulada**, não apagada — e a conta dona dela também é mantida, porque o banco recusaria (RESTRICT) e porque apagar levaria junto o vínculo de uma pessoa de verdade;
+- apaga as famílias **antes** das contas, na ordem que as chaves estrangeiras exigem;
+- a chave secreta vem do ambiente, nunca do repositório.
+
+**4. O que foi verificado (e como)**
+
+| Verificação | Resultado |
+|---|---|
+| `npm run test:rls` sem variável nenhuma | Rodou no Supabase local e passou os 15 testes |
+| `SUPABASE_TEST_URL=https://czqyiuztionqtqanmbep.supabase.co npm run test:rls` | **Bloqueado**, com a mensagem na tela e código de saída **1** |
+| `npm run db:cleanup` sem credenciais | Explicou quais variáveis faltam; código de saída 1 |
+| `npm run db:cleanup` contra o Supabase local | Listou as 2 contas de teste e a família, sem apagar nada |
+| `npm run db:cleanup -- --delete` | Apagou família e contas **na ordem certa**; rodar de novo: "nada a fazer" |
+| `npm run test:rls` depois da limpeza | Recriou tudo e passou os 15 testes (o teste continua repetível) |
+| `npm run dev:local` — **onde a conta cai?** | Os processos `next dev`/`next-server` rodaram com `NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321` (lido de `/proc/<pid>/environ`), enquanto o `.env.local` diz o projeto real. Um cadastro feito no navegador apareceu no banco **local** e foi apagado em seguida |
+
+A última linha é a que fecha o caso: era exatamente o caminho que criou as contas reais no `P17`.
+
+**5. Documentação e regra durável**
+
+Além do README (comandos novos, a trava e a limpeza), o `.github/instructions/copilot-instructions.md` ganhou a **regra 8**: nada de teste no projeto real, dizendo qual comando usar para cada tipo de teste. Sem isso, a próxima sessão de agente repete o `P17`.
+
+**Arquivos deste passo**
+
+- `vitest.integration.config.mts` (trava do alvo + chave local embutida)
+- `scripts/dev-local.mjs` e `scripts/cleanup-test-data.mjs` (novos)
+- `package.json` (scripts `dev:local` e `db:cleanup`)
+- `README.md`, `.github/instructions/copilot-instructions.md`
 
 ---
 

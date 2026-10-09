@@ -23,6 +23,10 @@ Sistema de finanças pessoais e da família para duas pessoas (Vinícius e Isabe
 5. **Status de item é calculado**, não armazenado digitado (ver `DOMAIN.md` §4.5).
 6. **Compra no cartão não mexe no saldo de conta; pagamento de fatura mexe.**
 7. Dados pessoais de um usuário nunca podem ser lidos por outro, nem por views, funções ou joins.
+8. **Nada de teste no projeto de verdade.** O `.env.local` aponta para o Supabase **real**: um cadastro feito com o app aberto cria conta de verdade, e conta criada assim só sai pelo painel (apagar usuário exige a chave secreta). Por isso:
+   - teste automatizado de banco roda com `npm run test:rls`, que só aceita banco descartável;
+   - teste de fluxo no navegador roda com `npm run dev:local` (app apontando para o Supabase local);
+   - se algo escapar, `npm run db:cleanup` encontra e apaga — e a conta nova precisa entrar na lista `TEST_EMAILS` de `scripts/cleanup-test-data.mjs`.
 
 ## Como trabalhar
 - Trabalhe **uma fatia do `ROADMAP.md` por vez**, em passos pequenos. Antes de codar, diga em poucas linhas o plano e quais arquivos vai tocar.

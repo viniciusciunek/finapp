@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:local": "node scripts/dev-local.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
@@ -13,7 +14,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:rls": "vitest run --config vitest.integration.config.mts",
-    "db:types": "supabase gen types typescript --linked"
+    "db:types": "supabase gen types typescript --linked",
+    "db:cleanup": "node scripts/cleanup-test-data.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
