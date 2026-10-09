@@ -1,6 +1,6 @@
 "use client";
 
-import { Home, UserRound, Users } from "lucide-react";
+import { Home, UserRound, Users, Wallet } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -9,11 +9,15 @@ import { cn } from "@/lib/utils";
 /**
  * Itens da barra inferior, na ordem de uso esperado no dia a dia.
  * Só entram telas que existem hoje — item que não leva a lugar nenhum confunde.
+ *
+ * "Contas" (bancárias) e "Perfil" (a conta do usuário) ficam longe uma da outra
+ * de propósito: lado a lado, "Conta" e "Contas" seriam confundidos no celular.
  */
 const NAV_ITEMS = [
   { href: "/", label: "Visão geral", icon: Home },
+  { href: "/contas", label: "Contas", icon: Wallet },
   { href: "/familia", label: "Família", icon: Users },
-  { href: "/conta", label: "Conta", icon: UserRound },
+  { href: "/perfil", label: "Perfil", icon: UserRound },
 ] as const;
 
 /**

@@ -68,8 +68,9 @@ O `dev:local` troca apenas as variáveis de ambiente do processo — o `.env.loc
 | `/login` · `/signup` | Entrada e cadastro (quem já está logado é levado direto para o app) |
 | `/onboarding` | Criar a família ou entrar com um código de convite |
 | `/` | Visão geral — o lugar onde a Folha do mês entra na Fatia 5 |
+| `/contas` | Contas e cartões do escopo ativo (só seus ou da família) |
 | `/familia` | Quem está na família, gerar convite (com botão copiar) e cancelar convites em aberto |
-| `/conta` | Nome, e-mail, papel na família, sair da família e sair da conta |
+| `/perfil` | Nome, e-mail, papel na família, sair da família e sair da conta |
 
 A alternância no topo (**Pessoal / Família**) troca a visão ativa e a escolha fica guardada em cookie.
 

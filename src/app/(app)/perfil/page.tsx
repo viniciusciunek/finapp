@@ -10,12 +10,12 @@ import { signOutAction } from "../../actions";
 import { LeaveFamilyCard } from "./_components/leave-family-card";
 
 export const metadata: Metadata = {
-  title: "Conta",
+  title: "Perfil",
 };
 
 /**
- * Tela da conta: quem é o usuário, em qual família está, e as saídas
- * (da família e da conta).
+ * Tela do perfil: quem é o usuário, em qual família está, e as saídas
+ * (da família e da sessão).
  *
  * O e-mail vem de `auth.users` via claims do token — não do formulário nem de
  * query string.
@@ -24,15 +24,15 @@ export const metadata: Metadata = {
  * sessão, então precisa de limite explícito para o Next 16 pré-renderizar a
  * casca (ver `src/server/session.ts`).
  */
-export default function AccountPage() {
+export default function ProfilePage() {
   return (
-    <Suspense fallback={<AccountPlaceholder />}>
-      <AccountContent />
+    <Suspense fallback={<ProfilePlaceholder />}>
+      <ProfileContent />
     </Suspense>
   );
 }
 
-function AccountPlaceholder() {
+function ProfilePlaceholder() {
   return (
     <div className="space-y-6" aria-busy="true">
       <span className="sr-only">Carregando…</span>
@@ -44,14 +44,14 @@ function AccountPlaceholder() {
   );
 }
 
-async function AccountContent() {
+async function ProfileContent() {
   const context = await requireHousehold();
   const isOwner = canManageHousehold(context.household.role);
 
   return (
     <div className="space-y-6">
       <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Sua conta</h2>
+        <h2 className="text-lg font-semibold">Seu perfil</h2>
 
         <dl className="divide-y rounded-xl border text-sm">
           <div className="flex items-baseline justify-between gap-3 p-3">
