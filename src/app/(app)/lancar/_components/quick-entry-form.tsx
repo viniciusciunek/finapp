@@ -1,18 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { labelForPaymentMethod } from "@/domain/transaction";
+import { normalizeCategoryName } from "@/domain/category";
 import { formatCentsForInput } from "@/lib/format";
 import type { Account } from "@/server/accounts";
 import type { Category } from "@/server/categories";
 
 import {
+  createCategoryAction,
   createTransactionAction,
   updateTransactionAction,
   type TransactionFormState,
@@ -84,6 +86,52 @@ export function QuickEntryForm(props: QuickEntryFormProps) {
 
   const { accounts, categories, today } = props;
 
+  // Categorias criadas agora, sem sair da tela. Ficam aqui (e não no servidor)
+  // porque só existem para este preenchimento — o próximo carregamento já traz
+  // a lista de verdade do banco.
+  const [newCategories, setNewCategories] = useState<Category[]>([]);
+  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+  const [isCreatingCategory, startCreatingCategory] = useTransition();
+
+  const allCategories = [...categories, ...newCategories];
+
+  function createCategoryFromField() {
+    const name = normalizeCategoryName(newCategoryName);
+
+    if (name === "") {
+      setCategoryError("Dê um nome para a categoria.");
+      return;
+    }
+
+    setCategoryError(null);
+
+    startCreatingCategory(async () => {
+      const formData = new FormData();
+      formData.set("name", name);
+
+      const result = await createCategoryAction({ error: null }, formData);
+
+      if (result.error || !result.category) {
+        setCategoryError(result.error ?? "Não foi possível criar a categoria.");
+        return;
+      }
+
+      setNewCategories((current) => [
+        ...current,
+        {
+          id: result.category!.id,
+          scope: props.categories[0]?.scope ?? "personal",
+          name: result.category!.name,
+        },
+      ]);
+      setCategoryId(result.category.id);
+      setNewCategoryName("");
+      setIsAddingCategory(false);
+    });
+  }
+
   // Sem conta no escopo não há de onde tirar o dinheiro — e o banco recusaria.
   // Melhor dizer isso agora do que só descobrir ao salvar.
   if (accounts.length === 0) {
@@ -153,7 +201,7 @@ export function QuickEntryForm(props: QuickEntryFormProps) {
               >
                 Sem categoria
               </Chip>
-              {categories.map((category) => (
+              {allCategories.map((category) => (
                 <Chip
                   key={category.id}
                   selected={categoryId === category.id}
@@ -163,7 +211,48 @@ export function QuickEntryForm(props: QuickEntryFormProps) {
                   {category.name}
                 </Chip>
               ))}
+              <Chip
+                selected={false}
+                disabled={isPending || isCreatingCategory}
+                onClick={() => setIsAddingCategory(true)}
+              >
+                + Nova
+              </Chip>
             </div>
+
+            {isAddingCategory ? (
+              <div className="flex items-center gap-2">
+                <Input
+                  value={newCategoryName}
+                  onChange={(event) => setNewCategoryName(event.target.value)}
+                  onKeyDown={(event) => {
+                    // Enter aqui cria a categoria — e não envia o lançamento.
+                    if (event.key === "Enter") {
+                      event.preventDefault();
+                      createCategoryFromField();
+                    }
+                  }}
+                  placeholder="Nome da categoria"
+                  maxLength={40}
+                  autoFocus
+                  disabled={isCreatingCategory}
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={isCreatingCategory}
+                  onClick={createCategoryFromField}
+                >
+                  {isCreatingCategory ? "Criando..." : "Criar"}
+                </Button>
+              </div>
+            ) : null}
+
+            {categoryError ? (
+              <p role="alert" className="text-destructive text-sm">
+                {categoryError}
+              </p>
+            ) : null}
           </div>
 
           <div className="space-y-2">

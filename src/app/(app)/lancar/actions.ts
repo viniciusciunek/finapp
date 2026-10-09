@@ -10,12 +10,20 @@ import {
   deleteTransaction,
   updateTransaction,
 } from "@/server/transactions";
+import { createCategory } from "@/server/categories";
 import { getScope } from "@/server/scope";
 import { requireHousehold } from "@/server/session";
 
-/** Estado do formulário de lançamento devolvido pela Server Action. */
+/**
+ * Estado do formulário de lançamento.
+ *
+ * `category` só vem preenchida pela ação de criar categoria: é como o
+ * formulário recebe de volta o que acabou de nascer, para marcar a opção nova
+ * sem recarregar a tela (e sem perder o que já estava digitado).
+ */
 export type TransactionFormState = {
   error: string | null;
+  category?: { id: string; name: string };
 };
 
 /**
@@ -109,6 +117,49 @@ export async function createTransactionAction(
 
   // Volta para a Visão geral, que é onde a pessoa vê a lista do mês.
   redirect("/");
+}
+
+const categorySchema = z.object({
+  name: z
+    .string()
+    .trim()
+    .min(1, "Dê um nome para a categoria.")
+    .max(40, "O nome está longo demais."),
+});
+
+/**
+ * Cria uma categoria no escopo ativo, no meio do lançamento.
+ *
+ * Devolve a categoria criada para o formulário poder selecioná-la na hora — se
+ * isso obrigasse a sair da tela e voltar, o lançamento de 15 segundos viraria
+ * dois. Nome repetido volta como erro de negócio (23505), com o texto do banco.
+ */
+export async function createCategoryAction(
+  _previousState: TransactionFormState,
+  formData: FormData,
+): Promise<TransactionFormState> {
+  const parsed = categorySchema.safeParse({ name: formData.get("name") });
+
+  if (!parsed.success) {
+    return {
+      error:
+        parsed.error.issues[0]?.message ?? "Verifique os dados informados.",
+    };
+  }
+
+  const context = await requireHousehold();
+  const scope = await getScope();
+
+  const { id, error } = await createCategory(
+    { scope, userId: context.userId, householdId: context.household.id },
+    parsed.data.name,
+  );
+
+  if (error || !id) {
+    return { error: error ?? "Não foi possível criar a categoria." };
+  }
+
+  return { error: null, category: { id, name: parsed.data.name } };
 }
 
 /** Id vindo da URL ou de campo escondido: entra como texto, sai validado. */
