@@ -43,6 +43,26 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"categories": {
+                  Row: {
+                    "created_at": string,"created_by": string | null,"household_id": string | null,"id": string,"name": string,"owner_user_id": string | null,"scope": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"created_by"?: string | null,"household_id"?: string | null,"id"?: string,"name": string,"owner_user_id"?: string | null,"scope"?: string,"updated_at"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"created_by"?: string | null,"household_id"?: string | null,"id"?: string,"name"?: string,"owner_user_id"?: string | null,"scope"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "categories_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"credit_cards": {
                   Row: {
                     "closing_day": number,"created_at": string,"created_by": string | null,"due_day": number,"household_id": string | null,"id": string,"limit_cents": number | null,"name": string,"owner_user_id": string | null,"scope": string,"updated_at": string
@@ -130,6 +150,44 @@ isOneToOne: false
                   }
                   Relationships: [
                     
+                  ]
+                },"transactions": {
+                  Row: {
+                    "account_id": string | null,"card_id": string | null,"category_id": string | null,"created_at": string,"created_by": string | null,"description": string,"household_id": string | null,"id": string,"installments_count": number,"notes": string | null,"occurred_on": string,"owner_user_id": string | null,"payment_method": string,"scope": string,"total_cents": number,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "account_id"?: string | null,"card_id"?: string | null,"category_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description": string,"household_id"?: string | null,"id"?: string,"installments_count"?: number,"notes"?: string | null,"occurred_on": string,"owner_user_id"?: string | null,"payment_method": string,"scope"?: string,"total_cents": number,"updated_at"?: string
+                  }
+                  Update: {
+                    "account_id"?: string | null,"card_id"?: string | null,"category_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string,"household_id"?: string | null,"id"?: string,"installments_count"?: number,"notes"?: string | null,"occurred_on"?: string,"owner_user_id"?: string | null,"payment_method"?: string,"scope"?: string,"total_cents"?: number,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "transactions_account_id_fkey"
+      columns: ["account_id"]
+isOneToOne: false
+      referencedRelation: "accounts"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "transactions_card_id_fkey"
+      columns: ["card_id"]
+isOneToOne: false
+      referencedRelation: "credit_cards"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "transactions_category_id_fkey"
+      columns: ["category_id"]
+isOneToOne: false
+      referencedRelation: "categories"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "transactions_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"user_settings": {
                   Row: {
