@@ -84,6 +84,7 @@ async function NewTransactionContent() {
       ) : null}
 
       <QuickEntryForm
+        mode="create"
         accounts={accountsResult.accounts}
         categories={categoriesResult.categories}
         today={today}

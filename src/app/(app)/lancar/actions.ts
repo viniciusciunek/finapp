@@ -5,7 +5,11 @@ import { z } from "zod";
 
 import { isUuid } from "@/domain/uuid";
 import { parseCentsFromText } from "@/domain/money";
-import { createTransaction } from "@/server/transactions";
+import {
+  createTransaction,
+  deleteTransaction,
+  updateTransaction,
+} from "@/server/transactions";
 import { getScope } from "@/server/scope";
 import { requireHousehold } from "@/server/session";
 
@@ -104,5 +108,92 @@ export async function createTransactionAction(
   }
 
   // Volta para a Visão geral, que é onde a pessoa vê a lista do mês.
+  redirect("/");
+}
+
+/** Id vindo da URL ou de campo escondido: entra como texto, sai validado. */
+const entityId = z
+  .string()
+  .refine(isUuid, "Este endereço não é válido. Volte para a lista do mês.");
+
+const updateSchema = quickEntrySchema.extend({ id: entityId });
+
+/** Salva as mudanças do lançamento (escopo e dono não mudam — o banco recusaria). */
+export async function updateTransactionAction(
+  _previousState: TransactionFormState,
+  formData: FormData,
+): Promise<TransactionFormState> {
+  const parsed = updateSchema.safeParse({
+    id: formData.get("id"),
+    description: formData.get("description"),
+    amount: formData.get("amount"),
+    categoryId: formData.get("categoryId"),
+    accountId: formData.get("accountId"),
+    occurredOn: formData.get("occurredOn"),
+    paymentMethod: formData.get("paymentMethod"),
+  });
+
+  if (!parsed.success) {
+    return {
+      error:
+        parsed.error.issues[0]?.message ?? "Verifique os dados informados.",
+    };
+  }
+
+  const totalCents = parseCentsFromText(parsed.data.amount);
+
+  if (totalCents === null || totalCents <= 0) {
+    return { error: "Confira o valor: use algo como 12,50." };
+  }
+
+  await requireHousehold();
+
+  const { error } = await updateTransaction(parsed.data.id, {
+    description: parsed.data.description,
+    categoryId: parsed.data.categoryId,
+    totalCents,
+    occurredOn: parsed.data.occurredOn,
+    paymentMethod: parsed.data.paymentMethod,
+    accountId: parsed.data.accountId,
+    cardId: null,
+    installmentsCount: 1,
+    notes: null,
+  });
+
+  if (error) {
+    return { error };
+  }
+
+  redirect("/");
+}
+
+/**
+ * Apaga o lançamento.
+ *
+ * A confirmação em dois toques fica na tela, como no apagar de conta e cartão.
+ * No servidor, apagar o que já não existe é sucesso: a lista fica sem ele dos
+ * dois jeitos.
+ */
+export async function deleteTransactionAction(
+  _previousState: TransactionFormState,
+  formData: FormData,
+): Promise<TransactionFormState> {
+  const parsed = z
+    .object({ id: entityId })
+    .safeParse({ id: formData.get("id") });
+
+  if (!parsed.success) {
+    return {
+      error:
+        parsed.error.issues[0]?.message ?? "Verifique os dados informados.",
+    };
+  }
+
+  const { error } = await deleteTransaction(parsed.data.id);
+
+  if (error) {
+    return { error };
+  }
+
   redirect("/");
 }

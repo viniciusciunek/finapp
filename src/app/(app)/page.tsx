@@ -182,21 +182,26 @@ async function OverviewContent({
 
             <ul className="divide-y overflow-hidden rounded-xl border">
               {items.map((transaction) => (
-                <li key={transaction.id} className="p-3">
-                  <div className="flex items-baseline justify-between gap-3">
-                    <p className="text-sm font-medium">
-                      {transaction.description}
+                <li key={transaction.id}>
+                  <Link
+                    href={`/lancar/${transaction.id}/editar`}
+                    className="hover:bg-muted/50 block p-3"
+                  >
+                    <div className="flex items-baseline justify-between gap-3">
+                      <p className="text-sm font-medium">
+                        {transaction.description}
+                      </p>
+                      <p className="text-sm font-medium">
+                        {formatBrl(transaction.totalCents)}
+                      </p>
+                    </div>
+                    <p className="text-muted-foreground text-xs">
+                      {labelForPaymentMethod(transaction.paymentMethod)}
+                      {transaction.categoryId
+                        ? ` · ${categoryNames.get(transaction.categoryId) ?? "sem categoria"}`
+                        : ""}
                     </p>
-                    <p className="text-sm font-medium">
-                      {formatBrl(transaction.totalCents)}
-                    </p>
-                  </div>
-                  <p className="text-muted-foreground text-xs">
-                    {labelForPaymentMethod(transaction.paymentMethod)}
-                    {transaction.categoryId
-                      ? ` · ${categoryNames.get(transaction.categoryId) ?? "sem categoria"}`
-                      : ""}
-                  </p>
+                  </Link>
                 </li>
               ))}
             </ul>

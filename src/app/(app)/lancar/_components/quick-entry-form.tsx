@@ -8,10 +8,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { labelForPaymentMethod } from "@/domain/transaction";
+import { formatCentsForInput } from "@/lib/format";
 import type { Account } from "@/server/accounts";
 import type { Category } from "@/server/categories";
 
-import { createTransactionAction, type TransactionFormState } from "../actions";
+import {
+  createTransactionAction,
+  updateTransactionAction,
+  type TransactionFormState,
+} from "../actions";
 
 const initialState: TransactionFormState = { error: null };
 
@@ -19,8 +24,39 @@ const initialState: TransactionFormState = { error: null };
 const METHODS = ["pix", "cash", "debit", "boleto"] as const;
 type Method = (typeof METHODS)[number];
 
+function isMethod(value: string | undefined): value is Method {
+  return METHODS.some((method) => method === value);
+}
+
 /**
- * Formulário de lançamento rápido.
+ * O que o formulário precisa em cada modo. União discriminada, como nos
+ * formulários de conta e cartão: no modo `edit`, o id é obrigatório de tipo.
+ */
+type QuickEntryFormProps =
+  | {
+      mode: "create";
+      accounts: Account[];
+      categories: Category[];
+      today: string;
+    }
+  | {
+      mode: "edit";
+      accounts: Account[];
+      categories: Category[];
+      today: string;
+      id: string;
+      initialValues: {
+        description: string;
+        totalCents: number;
+        occurredOn: string;
+        paymentMethod: string;
+        categoryId: string | null;
+        accountId: string | null;
+      };
+    };
+
+/**
+ * Formulário de lançamento rápido — criar e editar, um só.
  *
  * A ordem dos campos segue a ordem em que se pensa no gasto: **valor**,
  * descrição, categoria, como foi pago, de qual conta — e a data, que quase
@@ -31,21 +67,22 @@ type Method = (typeof METHODS)[number];
  * dos 15 segundos. Os valores viajam em campos escondidos, então o formulário
  * continua funcionando igual para o servidor.
  */
-export function QuickEntryForm({
-  accounts,
-  categories,
-  today,
-}: {
-  accounts: Account[];
-  categories: Category[];
-  today: string;
-}) {
+export function QuickEntryForm(props: QuickEntryFormProps) {
+  const isCreate = props.mode === "create";
+  const initial = props.mode === "edit" ? props.initialValues : null;
+
   const [state, formAction, isPending] = useActionState(
-    createTransactionAction,
+    isCreate ? createTransactionAction : updateTransactionAction,
     initialState,
   );
-  const [method, setMethod] = useState<Method>("pix");
-  const [categoryId, setCategoryId] = useState<string>("");
+  const [method, setMethod] = useState<Method>(
+    isMethod(initial?.paymentMethod) ? initial.paymentMethod : "pix",
+  );
+  const [categoryId, setCategoryId] = useState<string>(
+    initial?.categoryId ?? "",
+  );
+
+  const { accounts, categories, today } = props;
 
   // Sem conta no escopo não há de onde tirar o dinheiro — e o banco recusaria.
   // Melhor dizer isso agora do que só descobrir ao salvar.
@@ -70,6 +107,10 @@ export function QuickEntryForm({
     <Card>
       <CardContent className="pt-6">
         <form action={formAction} className="space-y-4">
+          {props.mode === "edit" ? (
+            <input type="hidden" name="id" value={props.id} />
+          ) : null}
+
           <div className="space-y-2">
             <Label htmlFor="amount">Valor</Label>
             <Input
@@ -79,8 +120,11 @@ export function QuickEntryForm({
               inputMode="decimal"
               placeholder="12,50"
               required
-              autoFocus
+              autoFocus={isCreate}
               disabled={isPending}
+              defaultValue={
+                initial ? formatCentsForInput(initial.totalCents) : undefined
+              }
             />
           </div>
 
@@ -94,6 +138,7 @@ export function QuickEntryForm({
               maxLength={80}
               required
               disabled={isPending}
+              defaultValue={initial?.description ?? ""}
             />
           </div>
 
@@ -162,7 +207,7 @@ export function QuickEntryForm({
               id="occurredOn"
               name="occurredOn"
               type="date"
-              defaultValue={today}
+              defaultValue={initial?.occurredOn ?? today}
               required
               disabled={isPending}
             />
@@ -175,7 +220,13 @@ export function QuickEntryForm({
           ) : null}
 
           <Button type="submit" className="w-full" disabled={isPending}>
-            {isPending ? "Lançando..." : "Lançar"}
+            {isPending
+              ? isCreate
+                ? "Lançando..."
+                : "Salvando..."
+              : isCreate
+                ? "Lançar"
+                : "Salvar mudanças"}
           </Button>
         </form>
       </CardContent>
