@@ -64,9 +64,10 @@ describe("monthLabel", () => {
 
 describe("dayLabel", () => {
   it("mostra o dia da semana com o número", () => {
-    // 2026-10-05 é uma segunda-feira.
-    expect(dayLabel("2026-10-05")).toContain("05");
-    expect(dayLabel("2026-10-05")).toMatch(/seg/i);
+    // 2026-10-05 é uma segunda-feira. O Intl escreve "seg., 5" — sem zero à
+    // esquerda no dia, então a asserção é sobre o conteúdo, não sobre o formato.
+    expect(dayLabel("2026-10-05")).toMatch(/^seg/i);
+    expect(dayLabel("2026-10-05")).toMatch(/\b5\b/);
   });
 });
 
