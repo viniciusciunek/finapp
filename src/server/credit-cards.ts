@@ -1,4 +1,9 @@
-import { ownershipForScope, parseScope, type Scope } from "@/domain/scope";
+import {
+  ownershipForScope,
+  parseScope,
+  type Ownership,
+  type Scope,
+} from "@/domain/scope";
 import { isUuid } from "@/domain/uuid";
 import { createClient } from "@/lib/supabase/server";
 
@@ -26,13 +31,6 @@ export type CardValues = {
 export type CreditCard = CardValues & {
   id: string;
   scope: Scope;
-};
-
-/** Quem está pedindo: o escopo ativo e as duas referências possíveis. */
-export type Ownership = {
-  scope: Scope;
-  userId: string;
-  householdId: string;
 };
 
 /** Só as colunas que a tela usa — o resto da linha não sai do banco à toa. */

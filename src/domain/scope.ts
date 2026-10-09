@@ -33,6 +33,19 @@ export function parseScope(value: unknown): Scope {
 }
 
 /**
+ * Quem está pedindo: o escopo ativo e as duas referências possíveis.
+ *
+ * Nasceu duplicado em `accounts.ts` e `credit-cards.ts`; na limpeza pós-Fatia 3
+ * passou a viver aqui, na companhia de `ownershipForScope` — é o par de entrada
+ * dela. Módulo puro, sem dependência de banco.
+ */
+export type Ownership = {
+  scope: Scope;
+  userId: string;
+  householdId: string;
+};
+
+/**
  * Dono de uma linha, a partir do escopo escolhido.
  *
  * Espelha o CHECK de escopo das tabelas que têm escopo (`accounts` e

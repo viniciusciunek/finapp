@@ -1513,9 +1513,9 @@ done
 | Valor e descrição | Digitar `abc30,00123` deixou o campo em **"30,00"**; a descrição gravou em `notes` |
 | Crédito e fatura | Compra de R$ 30,00 no crédito: no banco, `payment_method = credit`, **com cartão e sem conta**; na tela de contas, "**Fatura de outubro de 2026: R$ 30,00**" (compra antes do fechamento, na fatura do mês) |
 
-**Dívida conhecida, anotada em vez de escondida:** a trava "Crie uma conta primeiro" na tela de lançar olha só as contas — quem tem cartão e nenhuma conta fica sem conseguir lançar no crédito. Ajuste pequeno, para quando a tela for reaberta.
+**Dívida conhecida, anotada em vez de escondida:** a trava "Crie uma conta primeiro" na tela de lançar olha só as contas — quem tem cartão e nenhuma conta fica sem conseguir lançar no crédito. **Resolvida no mesmo dia** (`21be65e`): agora só bloqueia quando não há **nem conta nem cartão**.
 
-**Dívida de código:** o tipo `Ownership` está repetido em `accounts.ts` e `credit-cards.ts` (e os módulos novos importam de `accounts.ts` para não criar uma terceira cópia). O lugar certo é `domain/scope.ts` — limpeza curta, sem pressa.
+**Dívida de código:** o tipo `Ownership` está repetido em `accounts.ts` e `credit-cards.ts` (e os módulos novos importam de `accounts.ts` para não criar uma terceira cópia). **Resolvida no mesmo dia** (commit seguinte a `21be65e`): o tipo passou para `domain/scope.ts`, ao lado de `ownershipForScope` — uma definição só, e os quatro módulos de servidor importam de lá.
 
 **Arquivos deste passo**
 
@@ -1545,6 +1545,6 @@ done
 
 **O que ainda não existe (e onde entra):** parcelas (`splitInstallments`), fatura com valor real e tela própria da fatura são a **Fatia 4** — a soma calculada já está pronta e é o insumo dela.
 
-**Pendências do projeto:** o deploy (quando o app tiver uso dos dois) e as duas dívidas curtas deste passo (trava da tela de lançar e o tipo `Ownership`).
+**Pendências do projeto:** o deploy (quando o app tiver uso dos dois). As duas dívidas curtas do passo — a trava da tela de lançar e o tipo `Ownership` — foram resolvidas no mesmo dia (`21be65e` e o commit seguinte).
 
 

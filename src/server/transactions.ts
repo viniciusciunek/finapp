@@ -1,7 +1,6 @@
-import { ownershipForScope, type Scope } from "@/domain/scope";
+import { ownershipForScope, type Ownership, type Scope } from "@/domain/scope";
 import { createClient } from "@/lib/supabase/server";
 
-import type { Ownership } from "./accounts";
 import { toUserMessage } from "./errors";
 
 /**

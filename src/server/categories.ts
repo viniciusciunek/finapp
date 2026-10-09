@@ -1,10 +1,6 @@
-import type { Scope } from "@/domain/scope";
+import type { Ownership, Scope } from "@/domain/scope";
 import { createClient } from "@/lib/supabase/server";
 
-// `Ownership` mora em `accounts.ts` desde a Fatia 2 (contas e cartões repetem o
-// mesmo tipo). Enquanto não virar um módulo só, importar é melhor que uma
-// terceira cópia que pode divergir. Limpeza anotada para depois da Fatia 3.
-import type { Ownership } from "./accounts";
 import { toUserMessage } from "./errors";
 
 /**
