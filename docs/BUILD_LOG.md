@@ -1344,6 +1344,49 @@ Além do README (comandos novos, a trava e a limpeza), o `.github/instructions/c
 
 ---
 
+### P21 — Fatia 2: contas e cartões (fases 1 a 7) · 2026-10-09
+
+**Pedido:** a Fatia 2 do `ROADMAP.md` — CRUD de contas e cartões, cada um no escopo pessoal ou da família, com dia de fechamento e vencimento nos cartões.
+
+**Como foi feito:** em sete fases pequenas, cada uma com verificação própria e commit separado — banco → regras puras → acesso a dados → listagem → criar conta → criar cartão → editar → apagar. Cada fase só começava com a anterior verde; nenhuma delas deixou dívida para a seguinte.
+
+**Decisões registradas (D18 a D21)**
+
+| # | Decisão | Por quê |
+|---|---|---|
+| D18 | Tela nova `/contas` ("Contas") e a antiga `/conta` virou `/perfil` ("Perfil") | "Conta" e "Contas" a uma letra de distância na barra de baixo era confusão garantida |
+| D19 | `balance_cents`/`balance_as_of` entram agora, **sem UI e sem regra** | Quem usa saldo é a Fatia 8; as colunas existem desde já para a migration não ser refeita depois (`DOMAIN.md` §4.9) |
+| D20 | `scope`, `owner_user_id` e `household_id` são **imutáveis** (trigger no banco) | Sem isso, um membro poderia "puxar" uma conta da família para o pessoal dele |
+| D21 | `credit_cards.limit_cents` incluído; `accounts.bank` anulável | Limite é atributo estático do cartão, não merece fatia própria; dinheiro em espécie não tem banco |
+
+**Onde está cada parte**
+
+- **Banco:** `supabase/migrations/20261009122953_accounts_and_credit_cards.sql` — duas tabelas com CHECK de escopo e de tipo, 4 policies por tabela, trigger que proíbe mudar dono/escopo, grants mínimos.
+- **Regras puras:** `src/domain/account.ts`, `credit-card.ts`, `scope.ts` (ganhou `ownershipForScope`), `uuid.ts` e `money.ts` (`parseCentsFromText`), mais `src/lib/format.ts` (`formatCentsForInput`).
+- **Acesso a dados:** `src/server/accounts.ts` e `credit-cards.ts`.
+- **Telas:** `/contas` (lista), `/contas/nova`, `/contas/[id]/editar`, `/contas/cartoes/novo`, `/contas/cartoes/[id]/editar`, página 404 em pt-BR e a navegação de quatro itens.
+
+**Ponto de autorização que vale explicação (de novo):** o escopo **não** vem do formulário — vem do cookie lido no servidor, dentro da Server Action. Campo escondido no HTML é entrada do usuário: quem abrisse o inspetor poderia criar uma conta "pessoal" achando que era da família, ou o contrário. Editar e apagar também não recebem dono nem escopo: o banco recusaria, e quem decide o que é visível é o RLS.
+
+**Detalhe que rendeu código:** editar e apagar chegam por id na URL, e um id malformado (`/contas/abc/editar`) faria o Postgres recusar o cast para `uuid` — a tela diria "não foi possível carregar" quando a resposta certa é "não existe". Daí `isUuid` (`src/domain/uuid.ts`), usado na tela e na action.
+
+**Uma escolha de interação:** apagar só existe na tela de edição, com confirmação em dois toques, no mesmo desenho do cartão de sair da família. Botão de apagar na lista é fácil de errar com o dedo, e um lugar só para mexer no registro é mais simples de explicar do que dois.
+
+**Verificação de cada fase** (sempre contra o Supabase local, pela regra 8): testes de isolamento no banco, testes unitários e o fluxo no navegador — criar nos dois escopos, editar, apagar com confirmação, id torto caindo no 404 — com o resultado conferido no banco em cada passo.
+
+**Achado de ambiente (não é do nosso código):** com Cache Components, o Next 16 loga `InvariantError: Received an underlying cookies object ... This is a bug in Next.js` quando uma Server Action devolve estado (sem `redirect`) e a página é re-renderizada — o layout `(app)` relê `cookies()`. Aparece no log de desenvolvimento e **não tem efeito visível** (o cabeçalho continua na tela). Fica registrado para não virar caça-fantasma na próxima fatia.
+
+**Arquivos deste passo**
+
+- `supabase/migrations/20261009122953_accounts_and_credit_cards.sql` (nova)
+- `src/domain/`: `account.ts`, `credit-card.ts`, `scope.ts`, `uuid.ts`, `money.ts` (+ testes)
+- `src/server/`: `accounts.ts`, `credit-cards.ts`, `errors.ts` (+ testes)
+- `src/app/(app)/contas/**`, `src/app/(app)/perfil/**` (renomeada) e `src/app/not-found.tsx`
+- `src/integration/support/fixtures.ts` e `accounts-isolation.integration.test.ts`
+- `docs/DOMAIN.md` (§2, §3.3, §4.9)
+
+---
+
 ## Resumo da Fatia 0
 
 **Critério do `ROADMAP.md`:** *"deploy no ar, login funciona, `npm test` roda"*.
@@ -1375,5 +1418,27 @@ Além do README (comandos novos, a trava e a limpeza), o `.github/instructions/c
 **O que ainda não existe (e onde entra):** contas, cartões, categorias e a Folha do mês são a Fatia 2 em diante — a visão geral tem o lugar reservado para elas, e o domínio de dinheiro (`src/domain/money.ts`) já está pronto e testado desde a Fatia 0.
 
 **Pendência única do projeto:** deploy na Vercel (adiado pelo usuário).
+
+---
+
+## Resumo da Fatia 2 — concluída (fases 1 a 7)
+
+**Critério do `ROADMAP.md`:** *"todos os cartões e contas reais estiverem cadastrados"* — o app está pronto para isso: criar, editar e apagar, nos dois escopos, com confirmação antes de apagar. O cadastro dos dados reais é o passo seguinte, do usuário.
+
+| Fase | Situação |
+|---|---|
+| 1 — Banco | ✅ `accounts` e `credit_cards` com CHECK de escopo, RLS e trigger de imutabilidade (D20) + 11 testes de isolamento novos |
+| 2 — Regras puras | ✅ tipos de conta, dias de fatura, escopo, uuid e leitura de dinheiro digitado |
+| 3 — Acesso a dados | ✅ `src/server/accounts.ts` e `credit-cards.ts`, com o RLS decidindo autorização |
+| 4 — Listagem | ✅ `/contas` separando o que é da família do que é só seu, `/conta` → `/perfil` e navegação de quatro itens |
+| 5 — Criar conta | ✅ escopo vindo do cookie, nunca do formulário |
+| 6 — Criar cartão | ✅ limite opcional lido sem ponto flutuante (`parseCentsFromText`) |
+| 7 — Editar e apagar | ✅ formulários reaproveitados, confirmação em dois toques e 404 para id invisível |
+
+**Números:** 109 arquivos versionados · 21 decisões registradas · 21 passos documentados · 58 testes unitários + 26 de isolamento · 0 erros de lint, tipo, teste ou build.
+
+**O que ainda não existe (e onde entra):** lançamentos, categorias e a Folha do mês são a Fatia 3 — é lá que a pendência do `ON DELETE` de `account_id`/`card_id` ganha resposta (`DOMAIN.md` §2).
+
+**Pendências do projeto:** deploy na Vercel (adiado pelo usuário) e o cadastro das contas e cartões reais pelo app.
 
 
