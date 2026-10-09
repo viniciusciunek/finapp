@@ -7,8 +7,10 @@ import { isUuid } from "@/domain/uuid";
 import { getAccount } from "@/server/accounts";
 import { requireHousehold } from "@/server/session";
 
+import { deleteAccountAction } from "../../actions";
 import { AccountForm } from "../../_components/account-form";
 import { BackToAccountsLink } from "../../_components/back-link";
+import { DeleteCard } from "../../_components/delete-card";
 
 export const metadata: Metadata = {
   title: "Editar conta",
@@ -88,6 +90,14 @@ async function EditAccountContent({
             ? `Esta conta é de ${context.household.name} — os dois podem editar.`
             : "Esta conta é só sua — nem a família enxerga."
         }
+      />
+
+      <DeleteCard
+        id={account.id}
+        action={deleteAccountAction}
+        title="Apagar conta"
+        description="A conta sai da lista e não volta. Se ela ainda for usada, edite em vez de apagar."
+        label="Apagar conta"
       />
     </div>
   );

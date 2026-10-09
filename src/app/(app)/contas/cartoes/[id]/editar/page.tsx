@@ -7,8 +7,10 @@ import { isUuid } from "@/domain/uuid";
 import { getCreditCard } from "@/server/credit-cards";
 import { requireHousehold } from "@/server/session";
 
+import { deleteCreditCardAction } from "../../../actions";
 import { BackToAccountsLink } from "../../../_components/back-link";
 import { CardForm } from "../../../_components/card-form";
+import { DeleteCard } from "../../../_components/delete-card";
 
 export const metadata: Metadata = {
   title: "Editar cartão",
@@ -77,6 +79,14 @@ async function EditCardContent({
             ? `Este cartão é de ${context.household.name} — os dois podem editar.`
             : "Este cartão é só seu — nem a família enxerga."
         }
+      />
+
+      <DeleteCard
+        id={card.id}
+        action={deleteCreditCardAction}
+        title="Apagar cartão"
+        description="O cartão sai da lista e não volta. Se ele ainda for usado, edite em vez de apagar."
+        label="Apagar cartão"
       />
     </div>
   );

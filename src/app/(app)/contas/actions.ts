@@ -7,8 +7,12 @@ import { ACCOUNT_TYPES } from "@/domain/account";
 import { BILLING_DAY_MAX, BILLING_DAY_MIN } from "@/domain/credit-card";
 import { parseCentsFromText } from "@/domain/money";
 import { isUuid } from "@/domain/uuid";
-import { createAccount, updateAccount } from "@/server/accounts";
-import { createCreditCard, updateCreditCard } from "@/server/credit-cards";
+import { createAccount, deleteAccount, updateAccount } from "@/server/accounts";
+import {
+  createCreditCard,
+  deleteCreditCard,
+  updateCreditCard,
+} from "@/server/credit-cards";
 import { getScope } from "@/server/scope";
 import { requireHousehold } from "@/server/session";
 
@@ -238,6 +242,62 @@ export async function updateCreditCardAction(
     dueDay: parsed.data.dueDay,
     limitCents,
   });
+
+  if (error) {
+    return { error };
+  }
+
+  redirect("/contas");
+}
+
+/** Mesma forma para os dois: apagar só precisa do id. */
+const deleteSchema = z.object({ id: entityId });
+
+/**
+ * Apaga a conta.
+ *
+ * A confirmação **não** mora aqui: quem confirma é a tela, em dois toques
+ * (mesmo padrão de sair da família). No servidor, apagar o que já não existe é
+ * sucesso — o resultado que a pessoa queria (a conta fora da lista) foi
+ * atingido de qualquer forma.
+ */
+export async function deleteAccountAction(
+  _previousState: AccountFormState,
+  formData: FormData,
+): Promise<AccountFormState> {
+  const parsed = deleteSchema.safeParse({ id: formData.get("id") });
+
+  if (!parsed.success) {
+    return {
+      error:
+        parsed.error.issues[0]?.message ?? "Verifique os dados informados.",
+    };
+  }
+
+  const { error } = await deleteAccount(parsed.data.id);
+
+  if (error) {
+    return { error };
+  }
+
+  redirect("/contas");
+}
+
+/** Apaga o cartão — mesmas regras da conta. */
+export async function deleteCreditCardAction(
+  _previousState: AccountFormState,
+  formData: FormData,
+): Promise<AccountFormState> {
+  const parsed = deleteSchema.safeParse({ id: formData.get("id") });
+
+  if (!parsed.success) {
+    return {
+      error:
+        parsed.error.issues[0]?.message ?? "Verifique os dados informados.",
+    };
+  }
+
+  const { error } = await deleteCreditCard(parsed.data.id);
 
   if (error) {
     return { error };
