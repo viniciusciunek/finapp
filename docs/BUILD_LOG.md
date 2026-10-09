@@ -1385,6 +1385,8 @@ Além do README (comandos novos, a trava e a limpeza), o `.github/instructions/c
 - `src/integration/support/fixtures.ts` e `accounts-isolation.integration.test.ts`
 - `docs/DOMAIN.md` (§2, §3.3, §4.9)
 
+**Fechamento (2026-10-09).** Critério do roadmap atendido: as contas e cartões reais foram cadastrados pelo próprio app, nos dois escopos, e cada um aparece na visão certa — "Da família" ou "Só suas" — depois de alternar o escopo. Só depois disso a fatia é dada por pronta; antes, o que existia era código verde e banco de verdade sem uso.
+
 ---
 
 ### P22 — O cadastro não funcionava no projeto real (migrations pendentes na nuvem) · 2026-10-09
@@ -1478,6 +1480,6 @@ done
 
 **O que ainda não existe (e onde entra):** lançamentos, categorias e a Folha do mês são a Fatia 3 — é lá que a pendência do `ON DELETE` de `account_id`/`card_id` ganha resposta (`DOMAIN.md` §2).
 
-**Pendências do projeto:** deploy na Vercel (adiado pelo usuário) e o cadastro das contas e cartões reais pelo app.
+**Pendências do projeto:** deploy na Vercel (adiado pelo usuário — o cadastro das contas e cartões reais, que era a outra, foi concluído em 2026-10-09).
 
 
