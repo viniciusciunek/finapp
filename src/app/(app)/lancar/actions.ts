@@ -233,19 +233,24 @@ export async function updateTransactionAction(
     return { error: "Escolha de qual conta saiu o dinheiro." };
   }
 
-  await requireHousehold();
+  const context = await requireHousehold();
+  const scope = await getScope();
 
-  const { error } = await updateTransaction(parsed.data.id, {
-    description: parsed.data.description,
-    categoryId: parsed.data.categoryId,
-    totalCents,
-    occurredOn: parsed.data.occurredOn,
-    paymentMethod: parsed.data.paymentMethod,
-    accountId: usesCard ? null : parsed.data.accountId,
-    cardId: usesCard ? parsed.data.cardId : null,
-    installmentsCount: 1,
-    notes: parsed.data.notes,
-  });
+  const { error } = await updateTransaction(
+    { scope, userId: context.userId, householdId: context.household.id },
+    parsed.data.id,
+    {
+      description: parsed.data.description,
+      categoryId: parsed.data.categoryId,
+      totalCents,
+      occurredOn: parsed.data.occurredOn,
+      paymentMethod: parsed.data.paymentMethod,
+      accountId: usesCard ? null : parsed.data.accountId,
+      cardId: usesCard ? parsed.data.cardId : null,
+      installmentsCount: 1,
+      notes: parsed.data.notes,
+    },
+  );
 
   if (error) {
     return { error };

@@ -101,14 +101,32 @@ export async function ensureHousehold(client: SupabaseClient): Promise<string> {
 
   // Segunda execução em diante: o MVP permite uma família por usuário, então
   // create_household recusa e reaproveitamos a que já existe.
-  const { data: membership } = await client
+  //
+  // O filtro por `user_id` não é enfeite: a policy deixa um membro ler os
+  // vínculos da própria família, então sem ele a consulta veria também a
+  // linha do parceiro — e dois vínculos fazem o `maybeSingle` virar erro.
+  // Foi assim que a suíte ficou instável quando passou a rodar quatro
+  // arquivos em paralelo: um deles já tinha B na família, o outro ainda não.
+  const { data: authData } = await client.auth.getUser();
+  const userId = authData.user?.id;
+
+  if (!userId) {
+    throw new Error(
+      `Sessão ausente ao buscar a família de teste: ${error?.message ?? "sem usuário"}`,
+    );
+  }
+
+  const { data: membership, error: membershipError } = await client
     .from("household_members")
     .select("household_id")
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (!membership) {
     throw new Error(
-      `Não foi possível obter a família de teste: ${error?.message ?? "usuário sem vínculo"}`,
+      `Não foi possível obter a família de teste: ${
+        membershipError?.message ?? error?.message ?? "usuário sem vínculo"
+      }`,
     );
   }
 
@@ -126,6 +144,12 @@ export async function ensureOutsideHousehold(
  * Põe B dentro da família de A pelo caminho oficial: A gera um convite e B
  * aceita usando o código **formatado** (com hífen), como alguém digitando do
  * celular — é o caminho que a pessoa percorre de verdade.
+ *
+ * **Idempotente de propósito:** se B já está na família, não faz nada. Os
+ * arquivos de teste rodam um por vez, mas em ordem que não é nossa — um deles
+ * pode terminar com B dentro e o próximo chamar isto de novo. O contrato é
+ * "garantir B dentro", não "entrar agora": era o "entrar agora" que fazia a
+ * suíte depender da ordem dos arquivos.
  */
 export async function joinHousehold(
   hostClient: SupabaseClient,
@@ -133,6 +157,28 @@ export async function joinHousehold(
   hostUserId: string,
   householdId: string,
 ): Promise<void> {
+  const { data: authData } = await guestClient.auth.getUser();
+  const guestUserId = authData.user?.id;
+
+  if (!guestUserId) {
+    throw new Error("Sessão ausente ao entrar na família de teste.");
+  }
+
+  async function isInside(): Promise<boolean> {
+    const { data } = await guestClient
+      .from("household_members")
+      .select("household_id")
+      .eq("user_id", guestUserId as string)
+      .eq("household_id", householdId)
+      .maybeSingle();
+
+    return data !== null;
+  }
+
+  if (await isInside()) {
+    return;
+  }
+
   const code = generateInviteCode((max) => randomInt(max));
 
   const { error: inviteError } = await hostClient
@@ -153,6 +199,12 @@ export async function joinHousehold(
   );
 
   if (acceptError) {
+    // "Já faz parte" é sucesso para quem chamou (o alvo é B dentro) — qualquer
+    // outra falha continua sendo falha.
+    if (await isInside()) {
+      return;
+    }
+
     throw new Error(`Não consegui aceitar o convite: ${acceptError.message}`);
   }
 }
