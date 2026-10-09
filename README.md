@@ -7,7 +7,7 @@ Sistema de finanças pessoais e da família para o Vinícius e a Isabelle — su
 - **Ordem de construção (fatias):** [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - **Histórico detalhado do que foi feito e por quê:** [`docs/BUILD_LOG.md`](docs/BUILD_LOG.md)
 
-> **Estado atual:** Fatia 0 (Fundação) concluída. Fatia 1 (Login e família) em andamento — **banco e camada de servidor prontos e validados** (família, convites, RLS com teste de isolamento); faltam as telas de cadastro, onboarding e família.
+> **Estado atual:** Fatia 0 (Fundação) concluída. Fatia 1 (Login e família) em andamento — fases **1 (banco)**, **2 (servidor)** e **3 (telas)** prontas: dá para criar conta, formar a família, convidar a outra pessoa por código e alternar entre a visão pessoal e a da família. Faltam os testes no CI e a validação final.
 
 ## Stack
 
@@ -42,13 +42,25 @@ npm run dev
 # http://localhost:3000
 ```
 
-Sem um usuário cadastrado não dá para entrar: crie um em **Supabase → Authentication → Users → Add user** (e-mail + senha, marcando *Auto Confirm User*). O perfil é criado automaticamente. A tela de cadastro própria entra na Fatia 1.
+Não é preciso criar usuário na mão: a tela de **`/signup`** cria a conta em segundos. Depois de entrar, a pessoa **cria a família** ou usa um **código de convite** recebido da outra.
 
 ### Configuração necessária no painel do Supabase
 
 | O quê | Onde | Por quê |
 |---|---|---|
 | **"Confirm email" desligado** | Authentication → Sign In / Providers → Email | Com a confirmação ligada, o cadastro não entra direto e o plano gratuito limita o envio de e-mails. Religar quando o app for usado de verdade. |
+
+## Telas
+
+| Rota | O que tem |
+|---|---|
+| `/login` · `/signup` | Entrada e cadastro (quem já está logado é levado direto para o app) |
+| `/onboarding` | Criar a família ou entrar com um código de convite |
+| `/` | Visão geral — o lugar onde a Folha do mês entra na Fatia 5 |
+| `/familia` | Quem está na família, gerar convite (com botão copiar) e cancelar convites em aberto |
+| `/conta` | Nome, e-mail, papel na família, sair da família e sair da conta |
+
+A alternância no topo (**Pessoal / Família**) troca a visão ativa e a escolha fica guardada em cookie.
 
 ## Comandos
 
@@ -83,7 +95,7 @@ npx supabase db push
 npx supabase migration new nome_da_migration
 ```
 
-> Não há migrations ainda: a primeira entra na Fatia 1, junto das tabelas de identidade/família (cada tabela nasce com RLS **e** teste de isolamento).
+> Depois de mudar o schema e aplicar a migration, rode `npm run db:types` para os tipos acompanharem.
 
 ### Migrations existentes
 
@@ -121,19 +133,22 @@ O teste cria **uma única vez** (e reaproveita nas execuções seguintes) dois u
 
 ```
 src/
-├── app/                 Rotas (App Router), layout, manifest da PWA
-│   ├── login/           Página e Server Action de login
-│   ├── loading.tsx      Estado de carregamento + limite de <Suspense>
-│   └── proxy.ts*        (na raiz de src/) Renovação da sessão a cada requisição
-├── components/ui/       Componentes do shadcn/ui
+├── app/                 Rotas (App Router)
+│   ├── (auth)/          Telas públicas: login e cadastro (o grupo não aparece na URL)
+│   ├── (app)/           Telas autenticadas: visão geral, família e conta
+│   ├── onboarding/      Criar/entrar na família (exige sessão, mas não família)
+│   ├── actions.ts       Server Actions compartilhadas (sair da conta)
+│   └── layout.tsx       Layout raiz + loading.tsx (limite de <Suspense>)
+├── components/ui/       Componentes do shadcn/ui (+ skeleton.tsx)
 ├── domain/              Regras de negócio puras (sem banco, sem React) + testes
 ├── lib/                 Utilitários e clientes do Supabase
-└── server/              Acesso a dados (as páginas/actions chamam daqui)
+├── server/              Acesso a dados (as páginas/actions chamam daqui)
+└── proxy.ts             (na raiz de src/) Renovação da sessão a cada requisição
 supabase/                Configuração do CLI e migrations
 scripts/                 Geração de assets (ícones)
 ```
 
-\* `src/proxy.ts` é o antigo `middleware.ts`, renomeado no Next 16.
+`src/proxy.ts` é o antigo `middleware.ts`, renomeado no Next 16.
 
 ## Convenções que não se quebram
 
@@ -143,7 +158,7 @@ scripts/                 Geração de assets (ícones)
 4. **Schema só muda por migration** versionada.
 5. **Status de item é calculado**, nunca digitado.
 6. **Compra no cartão não mexe no saldo da conta; o pagamento da fatura mexe.**
-7. **Toda tela que lê sessão fica dentro de um limite `<Suspense>`** (o `loading.tsx` cria esse limite) — o Cache Components do Next 16 trata leitura de cookies fora de `<Suspense>` como **erro de build**.
+7. **Toda leitura de sessão ou de dados da requisição fica dentro de um limite `<Suspense>` explícito**, no próprio componente. O Cache Components do Next 16 trata esse acesso fora de `<Suspense>` como erro (aceita pela validação do dev overlay e potencialmente como erro de build), e o `loading.tsx` da raiz **não** cobre o layout do segmento nem o carregamento da página. Ver `P17` no `BUILD_LOG.md`.
 
 ## Problemas conhecidos
 

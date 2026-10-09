@@ -8,14 +8,14 @@
 
 ## Status atual
 
-- **Fatia em andamento:** **1 — Login e família** — fases **1 (banco)** e **2 (servidor)** concluídas; faltam 3 (telas), 4 (CI) e 5 (validação)
-- **Último passo concluído:** `P16` — Camada de servidor (tipos do banco, contexto de sessão, família/convites, cadastro) + migration de backfill de identidade
-- **Próximo passo:** Fase 3 — telas (cadastro, onboarding, shell com navegação, família, conta)
+- **Fatia em andamento:** **1 — Login e família** — fases **1 (banco)**, **2 (servidor)** e **3 (telas)** concluídas; faltam 4 (CI) e 5 (validação)
+- **Último passo concluído:** `P17` — Fase 3: telas de login, cadastro, onboarding, shell do app, família e conta
+- **Próximo passo:** Fase 4 — decidir o que dos testes de isolamento entra no CI; Fase 5 — validação final e push
 - **Pendências manuais (usuário):**
   - [x] ~~Desligar a confirmação de e-mail~~ — feito (`npm run test:rls` passou contra a nuvem)
   - [x] ~~`supabase login` + `link`~~ — feito (projeto `czqyiuztionqtqanmbep` vinculado)
-  - [x] ~~Aplicar a migration na nuvem~~ — feito (`20261008180810` local = remoto)
-  - [ ] **Aplicar a migration de backfill** (`20261009141956`): `npx supabase db push`
+  - [x] ~~Aplicar as migrations na nuvem~~ — feito (as duas: `20261008180810` e `20261009141956`, local = remoto)
+  - [ ] Publicar os commits (`git push`)
   - [ ] Deploy na Vercel (adiado pelo usuário)
 
 ---
@@ -32,8 +32,11 @@
 | D6 | Diário de bordo em `docs/BUILD_LOG.md` (único, com status no topo) | Pedido do usuário: histórico detalhado + "em que pé estamos" em um só lugar, fácil de atualizar | Separar `JOURNAL.md` + `PROGRESS.md` |
 | D7 | Dinheiro sempre em centavos; primeiro módulo puro do domínio será `src/domain/money.ts` | Regra 1 das instruções + prova o harness do Vitest com código útil de verdade | Teste "hello world" descartável |
 | D8 | shadcn/ui com biblioteca base **Radix** (`radix-ui`), preset `radix-nova` | Radix é a base histórica do shadcn/ui: ecossistema maduro, ampla documentação/exemplos e maior compatibilidade com o grande volume de componentes de terceiros publicados no registry | `base` (Base UI) — biblioteca mais nova, ainda com menos exemplos publicados |
-| D9 | **Toda leitura de sessão/cookies fica atrás de um limite `<Suspense>`** (no caso das rotas atuais, via `loading.tsx`) | Exigência do Cache Components do Next 16: ler `cookies()` fora de um limite `<Suspense>` **quebra o build**. Além disso o shell estático da página carrega instantâneo e só o conteúdo privado espera a requisição | `instant = false` (testado: NÃO resolve o erro de build, só silencia a validação); desligar `cacheComponents` (briga com o padrão do framework) |
+| D9 | **Toda leitura de sessão/dados da requisição fica atrás de um limite `<Suspense>` explícito** | Exigência do Cache Components do Next 16. **Refinada no `P17`:** o `loading.tsx` da raiz faz o **build** passar (bastava nas fases 1–2), mas **não** cobre o layout do próprio segmento nem o carregamento de dados da página — nesses casos o dev overlay acusa `blocking-prerender-dynamic`. A solução é o `<Suspense>` **dentro do componente**: a casca (enquadramento + barra inferior) aparece na hora e só o miolo espera | `instant = false` (testado nos dois contextos: **não** resolve — silencia só a validação de "UI instantânea", não a de casca estática); desligar `cacheComponents` (briga com o padrão do framework); `"use cache"` (não se aplica a dado por usuário) |
 | D10 | Hospedagem em **servidor** (Vercel). **Descartado** `output: "export"` / GitHub Pages | O export estático é **incompatível** com Server Actions, `cookies()`, `proxy` e Image Optimization — ou seja, mataria o login e o logout. Ver `P14` para a evidência dos builds. Além disso, o GitHub Pages publica o site de forma **pública** (Pages privado exige GitHub Enterprise) | Migrar a autenticação para o browser (padrão SPA do Supabase) e usar GitHub Pages — cogitado e recusado pelo usuário |
+| D11 | `await connection()` **antes** de `getClaims()`, dentro de `getSessionContext()` | O `@supabase/auth-js` chama `Date.now()` para conferir a validade do token. Com o Cache Components, valor instável só pode ser calculado em tempo de requisição — sem `connection()`, o Next 16 acusa `blocking-prerender-current-time` em **toda** tela autenticada (o erro apontava para `OnboardingPage` e `AppLayout`). A ordem importa: `connection()` **antes** da chamada que lê o relógio. Fica em um lugar só (o ponto por onde toda tela passa) | `getSession()` em vez de `getClaims()` (não valida a assinatura do token — viola a regra de segurança); espalhar `connection()` por cada tela (repetição e esquecimento garantido) |
+| D12 | Grupos de rota `(auth)` e `(app)`, com `/onboarding` **fora** dos dois | `(auth)` compartilha o enquadramento centralizado das telas públicas e não aparece na URL; `(app)` compartilha o shell (cabeçalho + alternância de visão + barra inferior) e concentra o `requireHousehold()`. O onboarding fica **fora** de `(app)` de propósito: exige sessão, mas **não** família — dentro do grupo ele redirecionaria para si mesmo | Um layout raiz único com condicionais (difícil de ler e de manter); proteger só no `proxy` e deixar cada página se defender (regra de navegação repetida em N arquivos) |
+| D13 | Preferência de visão (pessoal/família) em **cookie `httpOnly`**, validado por `parseScope` | É preferência de navegação, não dado de negócio: cookie faz a escolha sobreviver à navegação sem poluir a URL. `httpOnly` porque só o servidor lê; `secure` só em produção, senão o navegador recusa em `localhost`; valor sempre passa por `parseScope` antes de ser gravado (cookie é entrada do usuário) | Parâmetro na URL (`?scope=`) — feio e some ao navegar; `localStorage` — exigiria JavaScript no cliente e permitiria divergência com o servidor |
 
 ---
 
@@ -1017,6 +1020,150 @@ npm run build           # ✓
 - `supabase/migrations/20261009141956_backfill_identity_for_existing_users.sql` (novo)
 - `package.json` (scripts `db:types`), `.prettierignore`
 
+### P17 — Fatia 1, fase 3: as telas · 2026-10-09
+
+**Objetivo da fase:** transformar a camada de servidor em telas usáveis — as duas pessoas precisam conseguir criar conta, formar a família e convidar uma à outra **pelo celular**, sem caderno e sem planilha.
+
+**Entrega em uma frase:** dá para se cadastrar, criar a família, gerar um código, a outra pessoa entrar com esse código e as duas verem a mesma família — verificado de ponta a ponta no navegador, com o log do servidor limpo.
+
+**1. Rotas reorganizadas em grupos (`git mv`, histórico preservado)**
+
+```
+src/app/
+  (auth)/          ← telas públicas, centralizadas, sem shell
+    layout.tsx
+    login/  → actions.ts, login-form.tsx, page.tsx
+    signup/ → actions.ts, signup-form.tsx, page.tsx
+  (app)/           ← telas autenticadas, com shell
+    layout.tsx, actions.ts, page.tsx
+    _components/ → app-nav.tsx, scope-switch.tsx
+    familia/ → page.tsx, _components/{invite-card,copy-code-button}.tsx
+    conta/   → page.tsx, _components/leave-family-card.tsx
+  onboarding/      ← fora dos dois grupos (ver D12)
+  actions.ts       ← `signOutAction`, usada por `(app)` e onboarding
+```
+
+Os parênteses **não aparecem na URL** — servem só para agrupar arquivos e compartilhar layout. Por isso `(app)/actions.ts` e companhia importam uns aos outros por caminho **relativo** (`../actions`): `@/app/(app)/...` funcionaria, mas parênteses em alias de import é fonte de confusão.
+
+**2. Telas públicas**
+
+- `/login` e `/signup` verificam a sessão **no servidor** antes de renderizar: quem já está logado não vê formulário, vai direto para onde faz sentido (onboarding ou visão geral).
+- Validação com Zod **no servidor** (a do navegador é só conveniência): nome 1–80, e-mail válido, senha ≥ 6.
+- O cadastro trata os dois cenários: com confirmação de e-mail ligada, mostra "confirme seu e-mail" em vez de deixar a pessoa presa.
+
+**3. Onboarding — o passo entre ter conta e ter família**
+
+Duas portas na mesma tela: **criar** a família (quem criou vira dono) ou **entrar com código**. O código aceito é cru ou formatado, em qualquer caixa (`3tk-tzh6-qtq` funciona) — a normalização existe nas duas pontas, no TypeScript e na função do banco (foi um bug real pego pelo teste, ver `P15`).
+
+**4. Shell do app (`(app)/layout.tsx`)**
+
+Cabeçalho (família + quem está logado), alternância de visão, conteúdo e **barra de navegação fixa embaixo** — padrão de app de celular, com alvo grande ao alcance do polegar.
+
+A barra é Client Component por um motivo só: `usePathname` para marcar o item ativo. A alternância de visão **não** usa JavaScript no cliente — é um formulário com dois botões de envio, e o estado ativo vem do cookie lido no servidor. Resultado: a tela já nasce no estado certo, sem piscar depois da hidratação.
+
+**5. Telas do app**
+
+| Tela | O que faz |
+|---|---|
+| `/` | Visão geral: explica a visão ativa (pessoal é "invisível para a família"; família é o que é compartilhado). É o lugar onde a Folha do mês entra na Fatia 5 |
+| `/familia` | Quem está na família (nome, e-mail, papel) + gerar convite (com botão copiar) + lista de convites válidos com cancelar |
+| `/conta` | Nome, e-mail, família, papel + sair da família (só para membros) + sair da conta |
+
+**Convenções das telas:** código e comentários em inglês, interface em pt-BR; erro de formulário em `<p role="alert">`; estado de carregamento com o primitivo `Skeleton` (`src/components/ui/skeleton.tsx`), para todas as telas esperarem do mesmo jeito.
+
+**6. Server Actions — onde cada uma mora e por quê**
+
+| Arquivo | Ações | Motivo da localização |
+|---|---|---|
+| `src/app/actions.ts` | `signOutAction` | Usada por dois grupos (`(app)` e onboarding) — fica na raiz |
+| `src/app/onboarding/actions.ts` | `createFamilyAction`, `joinFamilyAction` | Só o onboarding usa |
+| `src/app/(app)/actions.ts` | `setScopeAction`, `createInviteAction`, `revokeInviteAction`, `leaveFamilyAction` | Só o app autenticado usa |
+
+**Ponto de autorização que vale explicação:** o `householdId` **não** vem do formulário do convite — é lido do contexto da requisição (`requireHousehold()`). Aceitar um id enviado pela tela seria confiar no cliente para dizer a qual família o convite pertence; é o tipo de atalho que vira falha de autorização.
+
+**Sair da família existe de propósito.** Sem isso, quem entrasse com o código errado ficaria preso (o convite é de uso único e o dono não pode sair). A ação tem confirmação em dois toques porque a saída não é reversível pelo próprio usuário — só com convite novo.
+
+**7. PROBLEMA PRINCIPAL DO PASSO: o Cache Components não perdoa dado de requisição fora de `<Suspense>`**
+
+Sintoma: tudo funcionava, mas o log do servidor e o console do navegador acusavam, em cada tela autenticada:
+
+```
+Error: Route "/onboarding": Next.js encountered the unstable value `Date.now()` while prerendering.
+Error: Route "/familia": Next.js encountered uncached data during prerendering or a navigation.
+  `fetch(...)` or `connection()` accessed outside of `<Suspense>` ...
+```
+
+Investigação, na ordem:
+
+1. **O `Date.now()` não era nosso.** Nenhuma tela chama `Date.now()`. Procurei no `node_modules`: `@supabase/auth-js` usa `Date.now()` para conferir a validade do token. Ou seja, vinha do `getClaims()`. Isso explicava um detalhe estranho: `/login` (deslogado) não acusava nada, porque sem sessão o `getClaims()` retorna antes de validar.
+2. **A doc embarcada do Next diz o que fazer.** O `AGENTS.md` manda ler `node_modules/next/dist/docs/` antes de escrever código — e a seção *"Random values and timestamps"* do guia de caching dá a receita exata: **`await connection()` antes da operação + um `<Suspense>` em volta**. Os dois, não um.
+3. **Primeira tentativa: só `connection()`.** Resolveu o `Date.now()` e revelou o segundo erro (`uncached data outside <Suspense>`) — o experimento foi útil: provou que o problema era posicional.
+4. **`loading.tsx` não basta.** O `src/app/loading.tsx` (que fazia o **build** passar desde o `P09`) cria um limite, mas **não** cobre o layout do próprio segmento nem o carregamento de dados da página. Tentei também `export const instant = false` nos dois níveis: **não resolve** — ele silencia só a validação de "navegação instantânea", não a de casca estática.
+5. **A solução é o `<Suspense>` dentro do componente.** Confirmado por experimento controlado: com o limite explícito, o log ficou limpo.
+
+O padrão adotado (e o motivo de cada pedaço):
+
+```tsx
+export default function FamilyPage() {
+  return (
+    <Suspense fallback={<FamilyPlaceholder />}>
+      <FamilyContent />        {/* async: lê cookies + consulta o banco */}
+    </Suspense>
+  );
+}
+```
+
+O mesmo padrão foi aplicado em `(app)/layout.tsx` (o cabeçalho é dado de requisição), nas três telas do app e nas duas telas públicas. Ganhos concretos, verificados no navegador:
+
+- a **casca** (enquadramento, barra inferior) é pré-renderizada e aparece **na hora**;
+- navegar entre telas do app troca só o miolo — o cabeçalho e a barra nem piscam;
+- o build continua marcando todas as rotas como `◐` (Partial Prerender).
+
+Com o limite dentro de cada página, o `(app)/loading.tsx` ficou redundante e foi **removido**. O `src/app/loading.tsx` da raiz **ficou**: é o que garante que uma página futura que esqueça o próprio limite não derrube o build.
+
+**8. Dois problemas menores, ambos de configuração**
+
+- **ESLint reclamando de parâmetro `_`.** A regra `@typescript-eslint/no-unused-vars` usa `after-used` por padrão: só acusa quando nenhum argumento posterior é usado. Ou seja, a convenção `_previousState` valia pela metade. Adicionado `argsIgnorePattern: "^_"` (e `varsIgnorePattern`, `caughtErrorsIgnorePattern`) — as Server Actions recebem `(previousState, formData)` **por contrato** do React, mesmo quando não usam os dois.
+- **Tipos gerados obsoletos.** O `typecheck` falhou apontando para `.next/dev/types/validator.ts` referenciando `src/app/login/page.js`, que não existe mais desde a reorganização. Era resíduo de um `next dev` anterior à mudança de pastas. `rm -rf .next` + regenerar. **Lição:** depois de mover rotas, se o servidor de desenvolvimento já rodou, limpar `.next` antes de desconfiar do TypeScript.
+
+**Validação executada**
+
+```bash
+npm run format && npm run lint && npm run typecheck   # limpos
+npm test                                              # 33 testes unitários (5 arquivos)
+npm run test:rls                                      # 15 testes de isolamento (Supabase local)
+npm run build                                         # ✓ — todas as rotas como ◐ (Partial Prerender)
+```
+
+**Roteiro manual no navegador (fluxo completo, duas pessoas):**
+
+| # | Ação | Resultado |
+|---|---|---|
+| 1 | Abrir `/` sem sessão | Redireciona para `/login` |
+| 2 | Criar conta (Isabelle) | Vai para `/onboarding`, com saudação pelo nome |
+| 3 | Criar família "Nossa casa" | Vai para `/`, cabeçalho com o nome da família |
+| 4 | Alternar visão para "Família" | Título e texto mudam; botão marcado com `aria-pressed` |
+| 5 | Gerar convite | Código `3TK-TZH6-QTQ` formatado, "válido até 08/11", já listado abaixo |
+| 6 | Sair da conta | Vai para `/login` |
+| 7 | Criar segunda conta (Vinicius) | Vai para `/onboarding` |
+| 8 | Entrar com `3tk-tzh6-qtq` (minúsculas, com hífen) | Entra na "Nossa casa" — normalização funcionando ponta a ponta |
+| 9 | Abrir `/familia` como Vinicius | 2 pessoas: Isabelle **Dono**, Vinicius **Membro**; convite consumido (uso único) |
+| 10 | Abrir `/conta` como Vinicius | Cartão "Sair da família" presente (a dona **não** o vê — o banco recusaria) |
+| 11 | Sair da família (confirmando) | Volta para `/onboarding` |
+
+O log do servidor durante todo o roteiro: **nenhum erro**, e cada Server Action registrada com seu tempo (`setScopeAction` 4 ms, `createInviteAction` 129 ms, `joinFamilyAction` 132 ms, `leaveFamilyAction` 148 ms).
+
+**Arquivos desta fase**
+
+- `src/app/(auth)/layout.tsx`, `(auth)/signup/{actions.ts,page.tsx,signup-form.tsx}` (novos); `(auth)/login/page.tsx` (reescrito)
+- `src/app/onboarding/{actions.ts,page.tsx,create-family-form.tsx,join-family-form.tsx}` (novos)
+- `src/app/(app)/{layout.tsx,actions.ts}` (novos/reescritos); `(app)/page.tsx` (reescrito)
+- `src/app/(app)/_components/{app-nav.tsx,scope-switch.tsx}` (novos)
+- `src/app/(app)/familia/{page.tsx,_components/*}` e `conta/{page.tsx,_components/*}` (novos)
+- `src/app/actions.ts`, `src/server/scope.ts`, `src/components/ui/skeleton.tsx` (novos)
+- `src/server/session.ts` (`connection()` + comentário do porquê)
+- `eslint.config.mjs` (convenção do `_`), `src/app/(app)/loading.tsx` (removido)
+
 ---
 
 ## Resumo da Fatia 0
@@ -1030,5 +1177,23 @@ npm run build           # ✓
 | Deploy no ar | ⏳ **pendente do usuário**: criar o projeto na Vercel e configurar as variáveis |
 
 **Números:** 48 arquivos versionados · 10 decisões registradas · 15 passos documentados · 0 erros de lint/tipo/teste/build.
+
+---
+
+## Resumo da Fatia 1 — fases 1 a 3 de 5
+
+**Critério do `ROADMAP.md`:** *"as duas pessoas conseguem criar conta, formar a família e convidar uma à outra"*.
+
+| Fase | Situação |
+|---|---|
+| 1 — Banco: identidade e família | ✅ 5 tabelas, 10 policies, 6 funções (`create_household`, `accept_household_invite`, `leave_household`, …) + 15 testes de isolamento. Aplicada **local e na nuvem** |
+| 2 — Servidor | ✅ contexto de sessão, acesso a dados, cadastro e mensagens de erro em pt-BR |
+| 3 — Telas | ✅ login, cadastro, onboarding, shell do app, visão geral, família e conta — validadas no navegador com duas pessoas de verdade |
+| 4 — Testes no CI | ⏳ **próximo**: o CI não guarda segredos, então a decisão é o que dá para rodar sem eles |
+| 5 — Validação final e push | ⏳ depois da fase 4 |
+
+**Números:** 82 arquivos versionados · 13 decisões registradas · passos até `P17` · 33 testes unitários + 15 de isolamento · 0 erros de lint, tipo, teste ou build.
+
+**O que ainda não existe (e onde entra):** contas, cartões, categorias e a Folha do mês são a Fatia 2 em diante — a visão geral tem o lugar reservado para elas, e o domínio de dinheiro (`src/domain/money.ts`) já está pronto desde a Fatia 0.
 
 

@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 
 import { parseHouseholdRole, type HouseholdRole } from "@/domain/household";
 import { createClient } from "@/lib/supabase/server";
@@ -52,6 +53,14 @@ function fallbackNameFromEmail(email: string | null): string {
  */
 export const getSessionContext = cache(
   async (): Promise<SessionContext | null> => {
+    // `connection()` marca o ponto em que o render passa a depender da
+    // requisição. É obrigatório **antes** de `getClaims()`: o Supabase chama
+    // `Date.now()` para conferir a validade do token, e com os Cache Components
+    // um valor instável só pode ser calculado em tempo de requisição — sem
+    // isto, o Next acusa `blocking-prerender-current-time` (docs do Next 16,
+    // seção "Random values and timestamps").
+    await connection();
+
     const supabase = await createClient();
 
     const { data, error } = await supabase.auth.getClaims();
