@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { labelForPaymentMethod } from "@/domain/transaction";
 import { normalizeCategoryName } from "@/domain/category";
-import { sanitizeAmountInput } from "@/domain/money";
-import { formatCentsForInput } from "@/lib/format";
+import { splitInstallments } from "@/domain/installments";
+import { parseCentsFromText, sanitizeAmountInput } from "@/domain/money";
+import { labelForPaymentMethod, MAX_INSTALLMENTS } from "@/domain/transaction";
+import { formatBrl, formatCentsForInput } from "@/lib/format";
 import type { Account } from "@/server/accounts";
 import type { Category } from "@/server/categories";
 import type { CreditCard } from "@/server/credit-cards";
@@ -58,6 +59,7 @@ type QuickEntryFormProps =
         paymentMethod: string;
         categoryId: string | null;
         accountId: string | null;
+        installmentsCount: number;
         notes: string | null;
       };
     };
@@ -92,6 +94,11 @@ export function QuickEntryForm(props: QuickEntryFormProps) {
   const [categoryId, setCategoryId] = useState<string>(
     initial?.categoryId ?? "",
   );
+  // Parcelas: só existem no crédito. Fora dele o campo nem aparece, e o
+  // servidor força 1 — não existe parcela sem cartão (§4.2).
+  const [installments, setInstallments] = useState(
+    initial?.installmentsCount ?? 1,
+  );
 
   const { accounts, cards, categories, today } = props;
 
@@ -105,6 +112,15 @@ export function QuickEntryForm(props: QuickEntryFormProps) {
   const [isCreatingCategory, startCreatingCategory] = useTransition();
 
   const allCategories = [...categories, ...newCategories];
+
+  // Prévia do parcelamento, direto das regras puras: "3x de R$ 33,34". Quando o
+  // valor não se divide (mais vezes do que centavos), avisa aqui — em vez de
+  // deixar o servidor recusar depois de tudo preenchido.
+  const amountCents = parseCentsFromText(amountText);
+  const installmentParts =
+    amountCents !== null && amountCents > 0
+      ? splitInstallments(amountCents, installments)
+      : null;
 
   function createCategoryFromField() {
     const name = normalizeCategoryName(newCategoryName);
@@ -342,6 +358,42 @@ export function QuickEntryForm(props: QuickEntryFormProps) {
               </select>
             )}
           </div>
+
+          {method === "credit" && cards.length > 0 ? (
+            <div className="space-y-2">
+              <Label htmlFor="installments">Em quantas vezes</Label>
+              <select
+                id="installments"
+                name="installments"
+                value={installments}
+                onChange={(event) =>
+                  setInstallments(Number(event.target.value))
+                }
+                disabled={isPending}
+                className="border-input focus-visible:border-ring focus-visible:ring-ring/50 disabled:bg-input/50 h-8 w-full min-w-0 appearance-none rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:ring-3 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+              >
+                {Array.from(
+                  { length: MAX_INSTALLMENTS },
+                  (_, index) => index + 1,
+                ).map((count) => (
+                  <option key={count} value={count}>
+                    {count === 1 ? "À vista (1x)" : `${count}x`}
+                  </option>
+                ))}
+              </select>
+              {installments > 1 ? (
+                installmentParts ? (
+                  <p className="text-muted-foreground text-sm">
+                    {installments}x de {formatBrl(installmentParts[0] ?? 0)}
+                  </p>
+                ) : (
+                  <p className="text-destructive text-sm">
+                    Este valor não se divide em tantas parcelas.
+                  </p>
+                )
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="space-y-2">
             <Label htmlFor="occurredOn">Quando</Label>

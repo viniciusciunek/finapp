@@ -12,6 +12,7 @@ import {
   dayLabel,
 } from "@/domain/month";
 import { sumCents } from "@/domain/money";
+import { splitInstallments } from "@/domain/installments";
 import { labelForPaymentMethod } from "@/domain/transaction";
 import { formatBrl } from "@/lib/format";
 import { listCategories } from "@/server/categories";
@@ -55,6 +56,26 @@ function OverviewPlaceholder() {
       <Skeleton className="h-32 w-full rounded-xl" />
     </div>
   );
+}
+
+/** " · 3x de R$ 33,34" quando a compra foi parcelada; vazio caso contrário. */
+function installmentLabel(transaction: Transaction): string {
+  if (
+    transaction.paymentMethod !== "credit" ||
+    transaction.installmentsCount <= 1
+  ) {
+    return "";
+  }
+
+  const parts = splitInstallments(
+    transaction.totalCents,
+    transaction.installmentsCount,
+  );
+  const first = parts?.[0];
+
+  return first === undefined
+    ? ""
+    : ` · ${transaction.installmentsCount}x de ${formatBrl(first)}`;
 }
 
 async function OverviewContent({
@@ -197,6 +218,7 @@ async function OverviewContent({
                     </div>
                     <p className="text-muted-foreground text-xs">
                       {labelForPaymentMethod(transaction.paymentMethod)}
+                      {installmentLabel(transaction)}
                       {transaction.categoryId
                         ? ` · ${categoryNames.get(transaction.categoryId) ?? "sem categoria"}`
                         : ""}

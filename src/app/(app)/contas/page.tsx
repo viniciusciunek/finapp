@@ -5,15 +5,14 @@ import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { labelForAccountType } from "@/domain/account";
-import { monthKeyOf, monthLabel, monthRange, shiftMonth } from "@/domain/month";
-import { sumCents } from "@/domain/money";
+import { monthKeyOf, monthLabel } from "@/domain/month";
 import { resolveStatementMonth } from "@/domain/statement";
 import { formatBrl } from "@/lib/format";
 import { listAccounts } from "@/server/accounts";
 import { listCreditCards } from "@/server/credit-cards";
 import { getScope } from "@/server/scope";
 import { requireHousehold } from "@/server/session";
-import { listTransactionsBetween } from "@/server/transactions";
+import { listStatementsForMonths } from "@/server/statements";
 
 export const metadata: Metadata = {
   title: "Contas",
@@ -67,51 +66,49 @@ async function AccountsContent() {
   // Hoje em data local, no formato que o banco usa. É o que define a fatura
   // aberta de cada cartão (o dia da compra é o que decide o ciclo).
   const today = `${currentMonth}-${String(now.getDate()).padStart(2, "0")}`;
-  const currentWindow = monthRange(currentMonth);
-  const previousWindow = monthRange(shiftMonth(currentMonth, -1));
 
   // Duas consultas em paralelo, cada uma com o seu erro: uma falha ao carregar
   // os cartões não pode esconder as contas.
-  const [accountsResult, cardsResult, transactionsResult] = await Promise.all([
+  const [accountsResult, cardsResult] = await Promise.all([
     listAccounts(ownership),
     listCreditCards(ownership),
-    // A janela das compras que podem cair na fatura **de agora**: as do mês
-    // passado (depois do fechamento dele) e as deste mês.
-    listTransactionsBetween(ownership, previousWindow.from, currentWindow.to),
+  ]);
+
+  // A fatura **aberta** de cada cartão já se sabe antes de consultar:
+  // `resolveStatementMonth(hoje, closingDay)` — num cartão cujo fechamento já
+  // passou neste mês, a aberta é a do mês seguinte. Era essa a confusão que a
+  // errata do P23 registrou ("fatura de outubro" com a aberta sendo novembro).
+  const openMonths = cardsResult.cards.map((card) => ({
+    card,
+    month: resolveStatementMonth(today, card.closingDay),
+  }));
+
+  const statementsResult = await listStatementsForMonths(ownership, [
+    ...new Set(openMonths.map((entry) => entry.month)),
   ]);
 
   /**
-   * Fatura **aberta**, por cartão: a soma das compras de crédito que a regra do
-   * fechamento manda para o ciclo que ainda está rodando.
+   * Fatura **aberta**, por cartão, direto do banco: a linha mostra o
+   * `effectiveCents` (§4.3) — o valor real, quando informado; senão, a soma
+   * das parcelas. Cartão sem fatura aberta ainda vale R$ 0,00.
    *
-   * É a fatura aberta — `resolveStatementMonth(hoje, closingDay)` —, **não** a do
-   * mês de calendário: num cartão cujo fechamento já passou, a aberta é a do mês
-   * seguinte, e era para lá que a compra tinha ido. Mostrar "fatura de outubro"
-   * nesse caso dizia R$ 0,00 e parecia que nada tinha somado.
-   *
-   * É **derivada**, não guardada: apagar ou editar um lançamento muda a fatura
-   * sozinho. A fatura fechada, com valor real informado à mão, é a Fatia 4.
+   * Desde a Fatia 4 a soma vem das **parcelas** (`card_installments`), não mais
+   * das transações inteiras: uma compra em 3x pesa 1/3 na fatura do primeiro
+   * mês, como pesa no cartão de verdade.
    */
   const statementByCard = new Map<
     string,
     { month: string; totalCents: number }
   >();
 
-  for (const card of cardsResult.cards) {
-    const openStatement = resolveStatementMonth(today, card.closingDay);
+  for (const { card, month } of openMonths) {
+    const statement = statementsResult.statements.find(
+      (item) => item.cardId === card.id && item.referenceMonth === month,
+    );
 
     statementByCard.set(card.id, {
-      month: openStatement,
-      totalCents: sumCents(
-        transactionsResult.transactions
-          .filter((item) => item.cardId === card.id)
-          .filter(
-            (item) =>
-              resolveStatementMonth(item.occurredOn, card.closingDay) ===
-              openStatement,
-          )
-          .map((item) => item.totalCents),
-      ),
+      month,
+      totalCents: statement?.effectiveCents ?? 0,
     });
   }
 
@@ -178,6 +175,10 @@ async function AccountsContent() {
 
         {cardsResult.error ? (
           <p className="text-destructive text-sm">{cardsResult.error}</p>
+        ) : null}
+
+        {statementsResult.error ? (
+          <p className="text-destructive text-sm">{statementsResult.error}</p>
         ) : null}
 
         {cardsResult.cards.length === 0 && !cardsResult.error ? (

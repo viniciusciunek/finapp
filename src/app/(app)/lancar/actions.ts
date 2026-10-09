@@ -3,8 +3,9 @@
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { isUuid } from "@/domain/uuid";
 import { parseCentsFromText } from "@/domain/money";
+import { MAX_INSTALLMENTS } from "@/domain/transaction";
+import { isUuid } from "@/domain/uuid";
 import {
   createTransaction,
   deleteTransaction,
@@ -70,6 +71,16 @@ const quickEntrySchema = z.object({
   cardId: optionalId,
   occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Confira a data."),
   paymentMethod: z.enum(QUICK_PAYMENT_METHODS, "Escolha como foi pago."),
+  // Fora do crédito o campo nem existe no formulário, e a ação manda "1".
+  // Dentro dele, o select manda 1..48 — o mesmo teto do banco e do domínio.
+  installments: z
+    .string()
+    .transform((value) => Number(value))
+    .refine(
+      (value) =>
+        Number.isInteger(value) && value >= 1 && value <= MAX_INSTALLMENTS,
+      "Escolha entre 1 e 48 vezes.",
+    ),
 });
 
 /**
@@ -91,6 +102,7 @@ export async function createTransactionAction(
     cardId: formData.get("cardId"),
     occurredOn: formData.get("occurredOn"),
     paymentMethod: formData.get("paymentMethod"),
+    installments: formData.get("installments") ?? "1",
   });
 
   if (!parsed.success) {
@@ -130,7 +142,7 @@ export async function createTransactionAction(
       paymentMethod: parsed.data.paymentMethod,
       accountId: usesCard ? null : parsed.data.accountId,
       cardId: usesCard ? parsed.data.cardId : null,
-      installmentsCount: 1,
+      installmentsCount: usesCard ? parsed.data.installments : 1,
       notes: parsed.data.notes,
     },
   );
@@ -208,6 +220,7 @@ export async function updateTransactionAction(
     cardId: formData.get("cardId"),
     occurredOn: formData.get("occurredOn"),
     paymentMethod: formData.get("paymentMethod"),
+    installments: formData.get("installments") ?? "1",
   });
 
   if (!parsed.success) {
@@ -247,7 +260,7 @@ export async function updateTransactionAction(
       paymentMethod: parsed.data.paymentMethod,
       accountId: usesCard ? null : parsed.data.accountId,
       cardId: usesCard ? parsed.data.cardId : null,
-      installmentsCount: 1,
+      installmentsCount: usesCard ? parsed.data.installments : 1,
       notes: parsed.data.notes,
     },
   );
