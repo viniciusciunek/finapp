@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Suspense } from "react";
 
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { labelForAccountType } from "@/domain/account";
 import { formatBrl } from "@/lib/format";
@@ -79,7 +81,12 @@ async function AccountsContent() {
       </div>
 
       <section className="space-y-3">
-        <h3 className="font-medium">Contas</h3>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-medium">Contas</h3>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/contas/nova">Nova conta</Link>
+          </Button>
+        </div>
 
         {accountsResult.error ? (
           <p className="text-destructive text-sm">{accountsResult.error}</p>
