@@ -42,6 +42,9 @@ jobs:
   quality:
     name: Qualidade (lint, tipos, testes, build)
     runs-on: ubuntu-latest
+    # Leva ~2 min. O teto existe para falhar rápido se algo travar, em vez de
+    # consumir o limite padrão (6 horas) esperando.
+    timeout-minutes: 15
 
     steps:
       - name: Baixar o código
@@ -75,6 +78,10 @@ jobs:
   isolation:
     name: Isolamento entre usuários (RLS)
     runs-on: ubuntu-latest
+    # A maior parte do tempo é baixar as imagens do Supabase (a primeira execução
+    # em cada runner). Mesmo assim, 20 minutos é folga larga — se estourar, algo
+    # travou, e é melhor descobrir assim do que esperando o limite padrão.
+    timeout-minutes: 20
 
     steps:
       - name: Baixar o código

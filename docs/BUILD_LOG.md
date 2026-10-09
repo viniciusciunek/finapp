@@ -1208,6 +1208,7 @@ Ele roda **em paralelo** com o `quality` — o resultado dos dois aparece junto,
 - **A chave é lida, não escrita.** `supabase status -o env` imprime `CHAVE="valor"`, então o workflow extrai com `grep` + `cut`. A chave publicável local é fixa, mas deixá-la escrita no YAML criaria uma cópia para envelhecer.
 - **`db reset --local`, com a flag.** Em outra máquina o projeto pode estar vinculado à nuvem; sem `--local` o comando poderia mirar o alvo errado. Como não existe `supabase/seed.sql`, ele avisa `no files matched pattern: supabase/seed.sql` e segue — **não é erro**.
 - **Resetar do zero é parte do teste.** Aplicar as duas migrations em um banco vazio verifica as migrations em si, não só o que elas produzem na máquina de quem desenvolve.
+- **Teto de tempo nos dois jobs.** `timeout-minutes: 15` para `quality` e `20` para `isolation`. Sem isso, um travamento (um serviço que nunca fica saudável, por exemplo) consumiria o limite padrão do GitHub — **6 horas** — antes de avisar alguém.
 
 **3. O job foi ensaiado inteiro antes de subir**
 
