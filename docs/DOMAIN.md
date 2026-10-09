@@ -146,7 +146,7 @@ São necessárias porque uma policy em `household_members` que consultasse a pr�
 
 ## 5. Casos de teste obrigatórios
 
-> Os itens 1–7 são funções puras (Vitest, `npm test`, rodam no CI sem segredo). Os itens 8–9 existem como testes de verdade no repositório e cobrem o isolamento entre usuários.
+> Os itens 1–7 são funções puras (Vitest, `npm test`). Os itens 8–9 existem como testes de verdade no repositório e cobrem o isolamento entre usuários — rodam também no CI, contra um Supabase local que sobe dentro do próprio runner.
 
 1. Compra no dia anterior ao fechamento, no dia do fechamento e no dia seguinte, com fechamento dia 31 e em fevereiro.
 2. Parcelamento: 3.000,00 em 10x; 100,00 em 3x (centavos que não dividem exato: 33,34 + 33,33 + 33,33).

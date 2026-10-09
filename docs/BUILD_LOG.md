@@ -8,14 +8,14 @@
 
 ## Status atual
 
-- **Fatia em andamento:** **1 — Login e família** — fases **1 (banco)**, **2 (servidor)** e **3 (telas)** concluídas; faltam 4 (CI) e 5 (validação)
-- **Último passo concluído:** `P17` — Fase 3: telas de login, cadastro, onboarding, shell do app, família e conta
-- **Próximo passo:** Fase 4 — decidir o que dos testes de isolamento entra no CI; Fase 5 — validação final e push
+- **Fatia em andamento:** **1 — Login e família** — **concluída** (fases 1 a 5). O único item em aberto é o deploy, adiado pelo usuário
+- **Último passo concluído:** `P19` — Fase 5: limpeza, validação final e fechamento da fatia
+- **Próximo passo:** Fatia 2 — contas e cartões (`docs/ROADMAP.md`)
 - **Pendências manuais (usuário):**
   - [x] ~~Desligar a confirmação de e-mail~~ — feito (`npm run test:rls` passou contra a nuvem)
   - [x] ~~`supabase login` + `link`~~ — feito (projeto `czqyiuztionqtqanmbep` vinculado)
   - [x] ~~Aplicar as migrations na nuvem~~ — feito (as duas: `20261008180810` e `20261009141956`, local = remoto)
-  - [ ] Publicar os commits (`git push`)
+  - [x] ~~Publicar os commits~~ — feito
   - [ ] Deploy na Vercel (adiado pelo usuário)
 
 ---
@@ -37,6 +37,8 @@
 | D11 | `await connection()` **antes** de `getClaims()`, dentro de `getSessionContext()` | O `@supabase/auth-js` chama `Date.now()` para conferir a validade do token. Com o Cache Components, valor instável só pode ser calculado em tempo de requisição — sem `connection()`, o Next 16 acusa `blocking-prerender-current-time` em **toda** tela autenticada (o erro apontava para `OnboardingPage` e `AppLayout`). A ordem importa: `connection()` **antes** da chamada que lê o relógio. Fica em um lugar só (o ponto por onde toda tela passa) | `getSession()` em vez de `getClaims()` (não valida a assinatura do token — viola a regra de segurança); espalhar `connection()` por cada tela (repetição e esquecimento garantido) |
 | D12 | Grupos de rota `(auth)` e `(app)`, com `/onboarding` **fora** dos dois | `(auth)` compartilha o enquadramento centralizado das telas públicas e não aparece na URL; `(app)` compartilha o shell (cabeçalho + alternância de visão + barra inferior) e concentra o `requireHousehold()`. O onboarding fica **fora** de `(app)` de propósito: exige sessão, mas **não** família — dentro do grupo ele redirecionaria para si mesmo | Um layout raiz único com condicionais (difícil de ler e de manter); proteger só no `proxy` e deixar cada página se defender (regra de navegação repetida em N arquivos) |
 | D13 | Preferência de visão (pessoal/família) em **cookie `httpOnly`**, validado por `parseScope` | É preferência de navegação, não dado de negócio: cookie faz a escolha sobreviver à navegação sem poluir a URL. `httpOnly` porque só o servidor lê; `secure` só em produção, senão o navegador recusa em `localhost`; valor sempre passa por `parseScope` antes de ser gravado (cookie é entrada do usuário) | Parâmetro na URL (`?scope=`) — feio e some ao navegar; `localStorage` — exigiria JavaScript no cliente e permitiria divergência com o servidor |
+| D14 | **Não existe cliente Supabase no navegador** (`src/lib/supabase/client.ts` foi removido no `P19`) | Todo acesso a dado passa por `src/server/` e a regra do projeto diz que a interface nunca fala com o banco. Um cliente de browser disponível é convite a furar essa regra — e não havia nenhum uso real | Manter o cliente "para quando precisar": código sem uso que contradiz a arquitetura do próprio projeto |
+| D15 | Testes de isolamento (RLS) **rodam no CI**, contra um Supabase que sobe **dentro do runner** | A regra "nenhum usuário lê dado de outro" é a mais importante do projeto e não podia depender de alguém lembrar de rodar um comando na mão. Rodar contra a nuvem exigiria guardar credenciais no GitHub e sujaria o projeto real a cada push | Deixar fora do CI (era o estado anterior, justificado por "o CI não tem segredos"); apontar o CI para a nuvem com segredos guardados |
 
 ---
 
@@ -1166,6 +1168,114 @@ O log do servidor durante todo o roteiro: **nenhum erro**, e cada Server Action 
 
 ---
 
+### P18 — Fatia 1, fase 4: os testes de isolamento entram no CI · 2026-10-09
+
+**Objetivo da fase:** a regra número um do projeto — *"nenhum usuário lê dado de outro"* — deixar de depender de alguém lembrar de rodar `npm run test:rls` na mão.
+
+**Entrega em uma frase:** todo push e todo pull request passam a rodar os 15 testes de isolamento contra um Supabase de verdade, **sem nenhum segredo configurado no GitHub**.
+
+**1. O caminho escolhido (e os dois descartados)**
+
+Até aqui o CI era hermético: nenhum banco, nenhum segredo — e era exatamente por isso que o teste mais importante do projeto ficava de fora.
+
+| Opção | Veredito |
+|---|---|
+| Continuar fora do CI | Recusada: a regra mais importante do projeto merecia verificação automática |
+| Apontar o CI para a **nuvem** com credenciais guardadas no GitHub | Recusada: guardaria acesso ao projeto real em mais um lugar e faria o CI **sujar** o ambiente de verdade a cada push |
+| **Subir o Supabase dentro do runner** | Escolhida: o Docker já vem na imagem do GitHub Actions, não usa segredo nenhum e testa as migrations do zero |
+
+O job novo, `isolation`:
+
+```yaml
+isolation:
+  name: Isolamento entre usuários (RLS)
+  runs-on: ubuntu-latest
+  steps:
+    # … checkout, Node 24, npm ci …
+    - run: npx supabase start --exclude realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+    - run: npx supabase db reset --local
+    - run: |
+        API_URL="$(npx supabase status -o env | grep '^API_URL=' | cut -d'"' -f2)"
+        PUBLISHABLE_KEY="$(npx supabase status -o env | grep '^PUBLISHABLE_KEY=' | cut -d'"' -f2)"
+        SUPABASE_TEST_URL="$API_URL" SUPABASE_TEST_KEY="$PUBLISHABLE_KEY" npm run test:rls
+```
+
+Ele roda **em paralelo** com o `quality` — o resultado dos dois aparece junto, e o mais rápido não espera o mais lento.
+
+**2. Detalhes que só apareceram olhando o CLI de perto**
+
+- **Quais serviços pular.** `supabase start --help` lista os contêineres que dá para excluir: `gotrue, realtime, storage-api, imgproxy, kong, mailpit, postgrest, postgres-meta, studio, edge-runtime, logflare, vector, supavisor`. Ficaram **gotrue** (autenticação), **postgrest** (REST) e **kong** (o gateway por onde os dois são alcançados) — o teste se comporta como um usuário comum do app, então é tudo de que ele precisa. Cada serviço a menos é menos imagem para baixar e menos coisa para esperar ficar saudável.
+- **A chave é lida, não escrita.** `supabase status -o env` imprime `CHAVE="valor"`, então o workflow extrai com `grep` + `cut`. A chave publicável local é fixa, mas deixá-la escrita no YAML criaria uma cópia para envelhecer.
+- **`db reset --local`, com a flag.** Em outra máquina o projeto pode estar vinculado à nuvem; sem `--local` o comando poderia mirar o alvo errado. Como não existe `supabase/seed.sql`, ele avisa `no files matched pattern: supabase/seed.sql` e segue — **não é erro**.
+- **Resetar do zero é parte do teste.** Aplicar as duas migrations em um banco vazio verifica as migrations em si, não só o que elas produzem na máquina de quem desenvolve.
+
+**3. O job foi ensaiado inteiro antes de subir**
+
+Descobrir erro de YAML no CI é caro (ciclo de feedback de minutos). Então rodei aqui, na mesma ordem do job:
+
+```bash
+npx supabase stop                                  # estado limpo, como o runner
+npx supabase start --exclude <a mesma lista>       # lista aceita; API e chave publicadas
+npx supabase db reset --local                      # as 2 migrations aplicadas do zero
+API_URL=… PUBLISHABLE_KEY=… npm run test:rls       # 15 testes passando (716 ms)
+```
+
+Resultado: exatamente o esperado. A única diferença no CI é que o banco começa vazio (aqui ele reaproveita o volume entre execuções).
+
+**4. Quatro textos que ficaram mentindo**
+
+Quatro arquivos afirmavam que os testes de isolamento **não** rodam no CI (`vitest.integration.config.mts`, `vitest.config.mts`, `README.md` e `docs/DOMAIN.md`). Todos atualizados — documentação que descreve o comportamento antigo é pior do que documentação nenhuma, porque dá confiança errada.
+
+**Arquivos desta fase**
+
+- `.github/workflows/ci.yml` (job `isolation` + comentários do topo reescritos)
+- `vitest.integration.config.mts`, `vitest.config.mts`, `README.md`, `docs/DOMAIN.md`
+
+---
+
+### P19 — Fatia 1, fase 5: limpeza, validação final e fechamento · 2026-10-09
+
+**Objetivo da fase:** fechar a fatia sem ponta solta — código morto fora, tudo verificado de novo, decisões registradas.
+
+**1. Dois arquivos órfãos que voltaram ao disco**
+
+Ao retomar o trabalho, `git status` mostrou de volta dois arquivos removidos no `P17`:
+
+- `src/app/login/actions.ts` — cópia velha, de quando o login morava em `src/app/login/`. Não cria rota (pasta sem `page.tsx` não é rota), mas é um sósia do arquivo vivo em `src/app/(auth)/login/`: a próxima pessoa a mexer no login pode editar o errado.
+- `src/app/(app)/loading.tsx` — o próprio comentário dizia ser "o limite de `<Suspense>` das páginas deste grupo", o que deixou de ser verdade quando cada página passou a ter o seu.
+
+**Lição registrada:** arquivo apagado pode ressuscitar se o editor o tinha aberto. Depois de mexer em estrutura de rotas, conferir `git status` **antes** de seguir.
+
+**2. Código morto removido (e o critério)**
+
+| O que saiu | Por quê |
+|---|---|
+| `getAuthenticatedUser()` e o tipo `AuthenticatedUser` (`src/server/auth.ts`) | Superado por `getSessionContext()`, que responde a mesma pergunta e mais (perfil e família). Dois caminhos para "quem está logado" divergem com o tempo — e o comentário de segurança que havia nele (por que `getClaims()` e não `getSession()`) já existe em `src/server/session.ts` |
+| `src/lib/supabase/client.ts` (cliente de browser) | Nunca foi importado — e um cliente Supabase no navegador convida a furar a regra do projeto ("acesso a dados só em `src/server/`"). Se um dia fizer falta (realtime, por exemplo), a receita está no `P08`. Decisão registrada em `D14` |
+
+O critério foi: sai o que **não é usado e** ou duplica um caminho existente, ou briga com uma regra documentada. `src/domain/money.ts`, por exemplo, também ainda não é chamado por nenhuma tela, mas é regra de negócio testada e prevista para a Fatia 2 — esse ficou.
+
+**Validação executada (a bateria inteira, do zero)**
+
+```bash
+npm run format:check   # "All matched files use Prettier code style!"
+npm run lint           # sem erros nem avisos
+npm run typecheck      # next typegen + tsc, sem erros
+npm test               # 33 testes unitários (5 arquivos)
+npm run test:rls       # 15 testes de isolamento, contra o Supabase local
+npm run build          # ✓ — todas as rotas ◐ (Partial Prerender)
+```
+
+O ensaio do job `isolation` (descrito no `P18`) foi refeito depois da limpeza, com o mesmo resultado: 15 testes passando em 716 ms.
+
+**Arquivos desta fase**
+
+- `src/server/auth.ts` (remoção de `getAuthenticatedUser`), `src/lib/supabase/client.ts` (removido)
+- `src/app/login/actions.ts` e `src/app/(app)/loading.tsx` (órfãos removidos)
+- `docs/BUILD_LOG.md` (este registro), `README.md` (estado e CI)
+
+---
+
 ## Resumo da Fatia 0
 
 **Critério do `ROADMAP.md`:** *"deploy no ar, login funciona, `npm test` roda"*.
@@ -1180,20 +1290,22 @@ O log do servidor durante todo o roteiro: **nenhum erro**, e cada Server Action 
 
 ---
 
-## Resumo da Fatia 1 — fases 1 a 3 de 5
+## Resumo da Fatia 1 — concluída (fases 1 a 5)
 
-**Critério do `ROADMAP.md`:** *"as duas pessoas conseguem criar conta, formar a família e convidar uma à outra"*.
+**Critério do `ROADMAP.md`:** *"as duas pessoas conseguem criar conta, formar a família e convidar uma à outra"* — **atendido e verificado no navegador com duas contas**.
 
 | Fase | Situação |
 |---|---|
 | 1 — Banco: identidade e família | ✅ 5 tabelas, 10 policies, 6 funções (`create_household`, `accept_household_invite`, `leave_household`, …) + 15 testes de isolamento. Aplicada **local e na nuvem** |
 | 2 — Servidor | ✅ contexto de sessão, acesso a dados, cadastro e mensagens de erro em pt-BR |
-| 3 — Telas | ✅ login, cadastro, onboarding, shell do app, visão geral, família e conta — validadas no navegador com duas pessoas de verdade |
-| 4 — Testes no CI | ⏳ **próximo**: o CI não guarda segredos, então a decisão é o que dá para rodar sem eles |
-| 5 — Validação final e push | ⏳ depois da fase 4 |
+| 3 — Telas | ✅ login, cadastro, onboarding, shell do app, visão geral, família e conta |
+| 4 — Testes no CI | ✅ job `isolation`: sobe um Supabase local no runner, aplica as migrations do zero e roda os 15 testes — sem segredo nenhum |
+| 5 — Validação final | ✅ limpeza de código morto, bateria completa verde e registro fechado |
 
-**Números:** 82 arquivos versionados · 13 decisões registradas · passos até `P17` · 33 testes unitários + 15 de isolamento · 0 erros de lint, tipo, teste ou build.
+**Números:** 81 arquivos versionados · 15 decisões registradas · 19 passos documentados · 33 testes unitários + 15 de isolamento · 0 erros de lint, tipo, teste ou build.
 
-**O que ainda não existe (e onde entra):** contas, cartões, categorias e a Folha do mês são a Fatia 2 em diante — a visão geral tem o lugar reservado para elas, e o domínio de dinheiro (`src/domain/money.ts`) já está pronto desde a Fatia 0.
+**O que ainda não existe (e onde entra):** contas, cartões, categorias e a Folha do mês são a Fatia 2 em diante — a visão geral tem o lugar reservado para elas, e o domínio de dinheiro (`src/domain/money.ts`) já está pronto e testado desde a Fatia 0.
+
+**Pendência única do projeto:** deploy na Vercel (adiado pelo usuário).
 
 

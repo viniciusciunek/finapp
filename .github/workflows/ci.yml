@@ -1,20 +1,30 @@
 # Integração contínua — roda em todo push na main e em todo pull request.
 #
-# O que é verificado (nesta ordem, do mais barato para o mais caro):
-#   1. lint          → regras do ESLint (inclui as regras do Next)
-#   2. format:check  → o código está no padrão do Prettier (não escreve nada)
-#   3. typecheck     → `next typegen` + `tsc --noEmit` (erros de tipo)
-#   4. test          → testes unitários do domínio (Vitest)
-#   5. build         → build de produção do Next
+# São dois trabalhos independentes (rodam em paralelo):
+#
+#   quality — verificações rápidas, na ordem do mais barato para o mais caro:
+#     1. lint          → regras do ESLint (inclui as regras do Next)
+#     2. format:check  → o código está no padrão do Prettier (não escreve nada)
+#     3. typecheck     → `next typegen` + `tsc --noEmit` (erros de tipo)
+#     4. test          → testes unitários do domínio (Vitest)
+#     5. build         → build de produção do Next
+#
+#   isolation — a regra número um do projeto ("nenhum usuário lê dado de
+#   outro") verificada de verdade, contra um Supabase que sobe **dentro do
+#   runner** (o Docker já vem na imagem do GitHub Actions):
+#     1. `supabase start`    → sobe a stack local, sem os serviços que o teste não usa
+#     2. `supabase db reset` → aplica as migrations do zero, como um ambiente novo
+#     3. `test:rls`          → cria dois usuários e uma família, e tenta o que não deve dar
 #
 # Por que o build entra mesmo com deploy automático na Vercel: o CI precisa ser
 # uma barreira completa por si só (erros específicos do Next, como as regras do
 # Cache Components, só aparecem no build). Se um dia isso ficar redundante,
 # é esta etapa que deve sair primeiro.
 #
-# NÃO precisa de segredos: nenhuma etapa acessa o Supabase. Os testes são de
-# regras puras e o build não executa código que lê cookies (isso fica atrás do
-# limite de <Suspense> e só roda em requisição).
+# **Nenhum segredo é usado em nenhum dos dois.** O trabalho de isolamento aponta
+# para o Supabase local, com as chaves de demonstração que o próprio CLI gera —
+# nunca para o projeto da nuvem. Rodar contra a nuvem exigiria credenciais de
+# verdade guardadas no GitHub e sujaria o projeto real a cada push.
 
 name: CI
 
@@ -61,3 +71,39 @@ jobs:
 
       - name: Build de produção
         run: npm run build
+
+  isolation:
+    name: Isolamento entre usuários (RLS)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v7
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      # Banco, autenticação (gotrue), REST (postgrest) e o gateway (kong) bastam:
+      # o teste se comporta como um usuário comum do app. Studio, storage,
+      # realtime, funções e telemetria ficam de fora — cada serviço a menos é
+      # menos imagem para baixar e menos coisa para esperar ficar saudável.
+      - name: Subir o Supabase local
+        run: >
+          npx supabase start
+          --exclude realtime,storage-api,imgproxy,mailpit,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+
+      - name: Aplicar as migrations do zero
+        run: npx supabase db reset --local
+
+      - name: Testes de isolamento
+        run: |
+          API_URL="$(npx supabase status -o env | grep '^API_URL=' | cut -d'"' -f2)"
+          PUBLISHABLE_KEY="$(npx supabase status -o env | grep '^PUBLISHABLE_KEY=' | cut -d'"' -f2)"
+          echo "Rodando contra $API_URL"
+          SUPABASE_TEST_URL="$API_URL" SUPABASE_TEST_KEY="$PUBLISHABLE_KEY" npm run test:rls

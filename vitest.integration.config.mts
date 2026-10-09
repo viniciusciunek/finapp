@@ -8,8 +8,9 @@ import { defineConfig } from "vitest/config";
  *
  * Diferente do `npm test`, estes testes falam com um Supabase de verdade e
  * criam dados — por isso vivem em arquivo e comando separados
- * (`npm run test:rls`), e **não** entram no CI (que continua hermético, sem
- * segredo nenhum).
+ * (`npm run test:rls`). No CI eles **rodam** (job `isolation`), contra um
+ * Supabase que sobe dentro do próprio runner: nenhum segredo é usado e o
+ * projeto da nuvem nunca é tocado.
  *
  * De onde vêm as credenciais (em ordem de precedência):
  *   1. `SUPABASE_TEST_URL` / `SUPABASE_TEST_KEY` no ambiente — útil para

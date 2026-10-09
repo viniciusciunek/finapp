@@ -7,7 +7,7 @@ Sistema de finanças pessoais e da família para o Vinícius e a Isabelle — su
 - **Ordem de construção (fatias):** [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - **Histórico detalhado do que foi feito e por quê:** [`docs/BUILD_LOG.md`](docs/BUILD_LOG.md)
 
-> **Estado atual:** Fatia 0 (Fundação) concluída. Fatia 1 (Login e família) em andamento — fases **1 (banco)**, **2 (servidor)** e **3 (telas)** prontas: dá para criar conta, formar a família, convidar a outra pessoa por código e alternar entre a visão pessoal e a da família. Faltam os testes no CI e a validação final.
+> **Estado atual:** **Fatia 1 (Login e família) concluída.** Dá para criar conta, formar a família, convidar a outra pessoa por código e alternar entre a visão pessoal e a da família — com os testes de isolamento rodando no CI a cada push. Falta só o deploy (adiado). Próxima fatia: contas e cartões.
 
 ## Stack
 
@@ -127,7 +127,7 @@ npm run test:rls        # usa o Supabase configurado no .env.local
 SUPABASE_TEST_URL=http://127.0.0.1:54321 SUPABASE_TEST_KEY=<publishable key do supabase start> npm run test:rls
 ```
 
-O teste cria **uma única vez** (e reaproveita nas execuções seguintes) dois usuários `rls-teste+…@example.com` e uma família "Família de teste (RLS)". Ele **não** roda no CI de propósito: o CI não tem segredos. Para limpar o resíduo, apague a família de teste e depois os dois usuários no painel do Supabase.
+O teste cria **uma única vez** (e reaproveita nas execuções seguintes) dois usuários `rls-teste+…@example.com` e uma família "Família de teste (RLS)". No CI ele roda contra um Supabase local que sobe **dentro do runner** (job `isolation`) — nunca contra o projeto da nuvem, e sem nenhum segredo configurado. Para limpar o resíduo de uma execução local apontada para a nuvem, apague a família de teste e depois os dois usuários no painel do Supabase.
 
 ## Estrutura
 
@@ -172,4 +172,11 @@ Pendente (passo manual). O plano é **Vercel** ligada ao repositório do GitHub,
 
 ## CI
 
-O workflow `.github/workflows/ci.yml` roda em todo push na `main` e em pull requests: **lint → formatação → tipos → testes → build**. Não precisa de segredos.
+O workflow `.github/workflows/ci.yml` roda em todo push na `main` e em pull requests, em dois trabalhos paralelos:
+
+| Trabalho | O que faz |
+|---|---|
+| `quality` | lint → formatação → tipos → testes unitários → build |
+| `isolation` | sobe um Supabase **local dentro do runner**, aplica as migrations do zero e roda `npm run test:rls` (isolamento entre usuários) |
+
+Nenhum dos dois usa segredos: o trabalho de isolamento aponta para o Supabase local, nunca para o projeto da nuvem.
