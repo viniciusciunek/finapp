@@ -5,11 +5,15 @@ import { Suspense } from "react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { labelForAccountType } from "@/domain/account";
+import { monthKeyOf, monthLabel, monthRange, shiftMonth } from "@/domain/month";
+import { sumCents } from "@/domain/money";
+import { resolveStatementMonth } from "@/domain/statement";
 import { formatBrl } from "@/lib/format";
 import { listAccounts } from "@/server/accounts";
 import { listCreditCards } from "@/server/credit-cards";
 import { getScope } from "@/server/scope";
 import { requireHousehold } from "@/server/session";
+import { listTransactionsBetween } from "@/server/transactions";
 
 export const metadata: Metadata = {
   title: "Contas",
@@ -58,12 +62,45 @@ async function AccountsContent() {
     householdId: context.household.id,
   };
 
+  const currentMonth = monthKeyOf(new Date());
+  const currentWindow = monthRange(currentMonth);
+  const previousWindow = monthRange(shiftMonth(currentMonth, -1));
+
   // Duas consultas em paralelo, cada uma com o seu erro: uma falha ao carregar
   // os cartões não pode esconder as contas.
-  const [accountsResult, cardsResult] = await Promise.all([
+  const [accountsResult, cardsResult, transactionsResult] = await Promise.all([
     listAccounts(ownership),
     listCreditCards(ownership),
+    // A janela das compras que podem cair na fatura **de agora**: as do mês
+    // passado (depois do fechamento dele) e as deste mês.
+    listTransactionsBetween(ownership, previousWindow.from, currentWindow.to),
   ]);
+
+  /**
+   * Fatura de agora, por cartão: soma das compras de crédito que a regra do
+   * fechamento manda para este mês.
+   *
+   * É **derivada**, não guardada: apagar ou editar um lançamento muda a fatura
+   * sozinho, sem nenhum número para ficar desencontrado. A fatura com valor
+   * "real" informado à mão é a Fatia 4.
+   */
+  const statementByCard = new Map<string, number>();
+
+  for (const card of cardsResult.cards) {
+    statementByCard.set(
+      card.id,
+      sumCents(
+        transactionsResult.transactions
+          .filter((item) => item.cardId === card.id)
+          .filter(
+            (item) =>
+              resolveStatementMonth(item.occurredOn, card.closingDay) ===
+              currentMonth,
+          )
+          .map((item) => item.totalCents),
+      ),
+    );
+  }
 
   const isHouseholdView = scope === "household";
 
@@ -150,6 +187,10 @@ async function AccountsContent() {
                     {card.limitCents === null
                       ? ""
                       : ` · limite ${formatBrl(card.limitCents)}`}
+                  </p>
+                  <p className="text-sm font-medium">
+                    Fatura de {monthLabel(currentMonth)}:{" "}
+                    {formatBrl(statementByCard.get(card.id) ?? 0)}
                   </p>
                 </Link>
               </li>
