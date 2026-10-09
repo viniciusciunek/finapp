@@ -41,3 +41,37 @@ export function sumCents(values: readonly number[]): number {
 
   return total;
 }
+
+/**
+ * Converte valor digitado por gente em centavos.
+ *
+ * Aceita os formatos que aparecem no celular: `1234`, `1234,56`, `1.234,56` e
+ * `R$ 1.234,56`. Devolve `null` quando não dá para entender — quem chama decide
+ * a mensagem, porque só quem chamou sabe o que estava sendo preenchido.
+ *
+ * **Sem ponto flutuante em nenhum passo:** os milhares saem, a vírgula vira
+ * separador decimal e a conta é feita em inteiros. `parseFloat("1234.56") * 100`
+ * daria 123455.99999999999 — é exatamente o erro que a regra de dinheiro do
+ * projeto existe para evitar (`DOMAIN.md` §1).
+ */
+export function parseCentsFromText(text: string): number | null {
+  const trimmed = text.trim();
+
+  if (trimmed === "") {
+    return null;
+  }
+
+  const normalized = trimmed
+    .replace(/^R\$/i, "")
+    .replace(/\s/g, "")
+    .replace(/\./g, "") // separador de milhar do pt-BR
+    .replace(",", "."); // separador decimal do pt-BR
+
+  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) {
+    return null;
+  }
+
+  const [reais, decimals = ""] = normalized.split(".");
+
+  return Number(reais) * 100 + Number(decimals.padEnd(2, "0"));
+}

@@ -114,7 +114,12 @@ async function AccountsContent() {
       </section>
 
       <section className="space-y-3">
-        <h3 className="font-medium">Cartões</h3>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="font-medium">Cartões</h3>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/contas/cartoes/novo">Novo cartão</Link>
+          </Button>
+        </div>
 
         {cardsResult.error ? (
           <p className="text-destructive text-sm">{cardsResult.error}</p>
