@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { isCents, parseCentsFromText, sumCents } from "./money";
+import {
+  isCents,
+  parseCentsFromText,
+  sanitizeAmountInput,
+  sumCents,
+} from "./money";
 
 describe("isCents", () => {
   it("aceita inteiros, incluindo zero e negativos", () => {
@@ -62,5 +67,28 @@ describe("parseCentsFromText", () => {
     expect(parseCentsFromText("1,234")).toBeNull(); // três casas: ambíguo
     expect(parseCentsFromText("12,3,4")).toBeNull();
     expect(parseCentsFromText("-50")).toBeNull(); // sinal é decisão de quem chama
+  });
+});
+
+describe("sanitizeAmountInput", () => {
+  it("deixa entrar só o que é número de dinheiro", () => {
+    expect(sanitizeAmountInput("12a,5x")).toBe("12,5");
+    expect(sanitizeAmountInput("abc")).toBe("");
+    expect(sanitizeAmountInput("R$ 12,50")).toBe("12,50");
+  });
+
+  it("trata ponto como milhar, não como decimal", () => {
+    expect(sanitizeAmountInput("1.234,56")).toBe("1234,56");
+    expect(sanitizeAmountInput("1.234")).toBe("1234");
+  });
+
+  it("deixa no máximo duas casas e uma vírgula", () => {
+    expect(sanitizeAmountInput("12,345")).toBe("12,34");
+    expect(sanitizeAmountInput("12,5,6")).toBe("12,56");
+  });
+
+  it("o que sai daqui continua entendível pelo parser", () => {
+    expect(parseCentsFromText(sanitizeAmountInput("1.234,56"))).toBe(123456);
+    expect(parseCentsFromText(sanitizeAmountInput("12a,5"))).toBe(1250);
   });
 });

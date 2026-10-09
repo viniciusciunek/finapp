@@ -75,3 +75,23 @@ export function parseCentsFromText(text: string): number | null {
 
   return Number(reais) * 100 + Number(decimals.padEnd(2, "0"));
 }
+
+/**
+ * Limpa o valor **enquanto se digita**, em vez de só reclamar ao salvar.
+ *
+ * Ponto é separador de milhar no que as pessoas escrevem ("1.234,56") e a
+ * vírgula é o decimal — então o ponto sai e só a primeira vírgula fica, com no
+ * máximo duas casas. Letra não entra. O resultado ainda passa por
+ * `parseCentsFromText` antes de virar dinheiro: aqui é conforto, lá é garantia.
+ */
+export function sanitizeAmountInput(text: string): string {
+  const withoutThousands = text.replace(/\./g, "");
+  const onlyAllowed = withoutThousands.replace(/[^\d,]/g, "");
+  const [reais, ...rest] = onlyAllowed.split(",");
+
+  if (rest.length === 0) {
+    return reais.slice(0, 9);
+  }
+
+  return `${reais.slice(0, 9)},${rest.join("").slice(0, 2)}`;
+}
