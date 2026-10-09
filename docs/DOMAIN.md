@@ -36,11 +36,11 @@
 ### Lançamentos
 - `transactions` — scope, dono, description, category_id, `total_cents`, `occurred_on`, `payment_method` (`pix`|`cash`|`debit`|`boleto`|`credit`), `account_id` (nulo se crédito), `card_id` (só crédito), `installments_count` (padrão 1), `on_behalf_of_person_id` (nulo = gasto próprio), notes.
   - **Pendência para a Fatia 3:** decidir o `ON DELETE` de `account_id`/`card_id`. Apagar uma conta que já tem lançamento não pode apagar histórico — o mais provável é `restrict` (bloquear) com a interface explicando o motivo.
-- `card_installments` — transaction_id, number (1..n), amount_cents, statement_id. Só existe para `payment_method = 'credit'`.
+- `card_installments` — scope, dono, transaction_id, number (1..n), amount_cents, statement_id. Só existe para `payment_method = 'credit'` (garantido por trigger no banco). Apagar o lançamento apaga as parcelas (cascade); fatura com parcela não é apagada (restrict).
 
 ### Faturas
-- `statements` — card_id, `reference_month` (mês em que a fatura **fecha**), closing_date, due_date, `actual_cents` (nulo até o usuário informar), paid_cents, paid_at, paid_from_account_id, status (`open`|`closed`|`paid`|`partial`).
-  - `calculated_cents` **não é coluna**: é derivado (soma de `card_installments.amount_cents` da fatura). Pode ser exposto em uma view.
+- `statements` — scope, dono, card_id, `reference_month` (mês em que a fatura **fecha**, texto `AAAA-MM`), closing_date, due_date, `actual_cents` (nulo até o usuário informar), paid_cents, paid_at, paid_from_account_id, status (`open`|`closed`|`paid`|`partial`). Uma fatura por cartão e mês; criada automaticamente quando um lançamento no crédito precisar dela (§4.1).
+  - `calculated_cents` **não é coluna**: é derivado (soma de `card_installments.amount_cents` da fatura), calculado na leitura — nunca desencontra das parcelas. Pode ser exposto em uma view.
   - `effective_cents = coalesce(actual_cents, calculated_cents)`.
   - `unlogged_cents = actual_cents − calculated_cents` (apenas se `actual_cents` não for nulo).
 

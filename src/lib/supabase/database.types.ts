@@ -43,6 +43,38 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"card_installments": {
+                  Row: {
+                    "amount_cents": number,"created_at": string,"created_by": string | null,"household_id": string | null,"id": string,"number": number,"owner_user_id": string | null,"scope": string,"statement_id": string,"transaction_id": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "amount_cents": number,"created_at"?: string,"created_by"?: string | null,"household_id"?: string | null,"id"?: string,"number": number,"owner_user_id"?: string | null,"scope"?: string,"statement_id": string,"transaction_id": string,"updated_at"?: string
+                  }
+                  Update: {
+                    "amount_cents"?: number,"created_at"?: string,"created_by"?: string | null,"household_id"?: string | null,"id"?: string,"number"?: number,"owner_user_id"?: string | null,"scope"?: string,"statement_id"?: string,"transaction_id"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "card_installments_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "card_installments_statement_id_fkey"
+      columns: ["statement_id"]
+isOneToOne: false
+      referencedRelation: "statements"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "card_installments_transaction_id_fkey"
+      columns: ["transaction_id"]
+isOneToOne: false
+      referencedRelation: "transactions"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"categories": {
                   Row: {
                     "created_at": string,"created_by": string | null,"household_id": string | null,"id": string,"name": string,"owner_user_id": string | null,"scope": string,"updated_at": string
@@ -150,6 +182,38 @@ isOneToOne: false
                   }
                   Relationships: [
                     
+                  ]
+                },"statements": {
+                  Row: {
+                    "actual_cents": number | null,"card_id": string,"closing_date": string,"created_at": string,"created_by": string | null,"due_date": string,"household_id": string | null,"id": string,"owner_user_id": string | null,"paid_at": string | null,"paid_cents": number,"paid_from_account_id": string | null,"reference_month": string,"scope": string,"status": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actual_cents"?: number | null,"card_id": string,"closing_date": string,"created_at"?: string,"created_by"?: string | null,"due_date": string,"household_id"?: string | null,"id"?: string,"owner_user_id"?: string | null,"paid_at"?: string | null,"paid_cents"?: number,"paid_from_account_id"?: string | null,"reference_month": string,"scope"?: string,"status"?: string,"updated_at"?: string
+                  }
+                  Update: {
+                    "actual_cents"?: number | null,"card_id"?: string,"closing_date"?: string,"created_at"?: string,"created_by"?: string | null,"due_date"?: string,"household_id"?: string | null,"id"?: string,"owner_user_id"?: string | null,"paid_at"?: string | null,"paid_cents"?: number,"paid_from_account_id"?: string | null,"reference_month"?: string,"scope"?: string,"status"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "statements_card_id_fkey"
+      columns: ["card_id"]
+isOneToOne: false
+      referencedRelation: "credit_cards"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "statements_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "statements_paid_from_account_id_fkey"
+      columns: ["paid_from_account_id"]
+isOneToOne: false
+      referencedRelation: "accounts"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"transactions": {
                   Row: {
