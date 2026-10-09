@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { isUuid } from "@/domain/uuid";
 import { listAccounts } from "@/server/accounts";
 import { listCategories } from "@/server/categories";
+import { listCreditCards } from "@/server/credit-cards";
 import { getScope } from "@/server/scope";
 import { requireHousehold } from "@/server/session";
 import { getTransaction } from "@/server/transactions";
@@ -67,10 +68,11 @@ async function EditTransactionContent({
     householdId: context.household.id,
   };
 
-  const [transactionResult, accountsResult, categoriesResult] =
+  const [transactionResult, accountsResult, cardsResult, categoriesResult] =
     await Promise.all([
       getTransaction(id),
       listAccounts(ownership),
+      listCreditCards(ownership),
       listCategories(ownership),
     ]);
 
@@ -109,6 +111,7 @@ async function EditTransactionContent({
         id={transaction.id}
         initialValues={transaction}
         accounts={accountsResult.accounts}
+        cards={cardsResult.cards}
         categories={categoriesResult.categories}
         today={transaction.occurredOn}
       />

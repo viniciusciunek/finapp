@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { listAccounts } from "@/server/accounts";
 import { listCategories } from "@/server/categories";
+import { listCreditCards } from "@/server/credit-cards";
 import { getScope } from "@/server/scope";
 import { requireHousehold } from "@/server/session";
 
@@ -52,8 +53,11 @@ async function NewTransactionContent() {
   };
 
   // Contas e categorias em paralelo: uma falha numa não precisa esconder a outra.
-  const [accountsResult, categoriesResult] = await Promise.all([
+  // Contas, cartões e categorias em paralelo: uma falha numa não precisa esconder
+  // as outras.
+  const [accountsResult, cardsResult, categoriesResult] = await Promise.all([
     listAccounts(ownership),
+    listCreditCards(ownership),
     listCategories(ownership),
   ]);
 
@@ -86,6 +90,7 @@ async function NewTransactionContent() {
       <QuickEntryForm
         mode="create"
         accounts={accountsResult.accounts}
+        cards={cardsResult.cards}
         categories={categoriesResult.categories}
         today={today}
       />

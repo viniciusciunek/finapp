@@ -13,6 +13,7 @@ import { sanitizeAmountInput } from "@/domain/money";
 import { formatCentsForInput } from "@/lib/format";
 import type { Account } from "@/server/accounts";
 import type { Category } from "@/server/categories";
+import type { CreditCard } from "@/server/credit-cards";
 
 import {
   createCategoryAction,
@@ -23,8 +24,8 @@ import {
 
 const initialState: TransactionFormState = { error: null };
 
-/** Os meios do lançamento rápido (crédito entra na Fatia 4, com parcelas). */
-const METHODS = ["pix", "cash", "debit", "boleto"] as const;
+/** Os meios do lançamento rápido. Crédito vai para o cartão; o resto, para uma conta. */
+const METHODS = ["pix", "cash", "debit", "boleto", "credit"] as const;
 type Method = (typeof METHODS)[number];
 
 function isMethod(value: string | undefined): value is Method {
@@ -39,12 +40,14 @@ type QuickEntryFormProps =
   | {
       mode: "create";
       accounts: Account[];
+      cards: CreditCard[];
       categories: Category[];
       today: string;
     }
   | {
       mode: "edit";
       accounts: Account[];
+      cards: CreditCard[];
       categories: Category[];
       today: string;
       id: string;
@@ -90,7 +93,7 @@ export function QuickEntryForm(props: QuickEntryFormProps) {
     initial?.categoryId ?? "",
   );
 
-  const { accounts, categories, today } = props;
+  const { accounts, cards, categories, today } = props;
 
   // Categorias criadas agora, sem sair da tela. Ficam aqui (e não no servidor)
   // porque só existem para este preenchimento — o próximo carregamento já traz
@@ -293,21 +296,51 @@ export function QuickEntryForm(props: QuickEntryFormProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="accountId">De qual conta</Label>
-            <select
-              id="accountId"
-              name="accountId"
-              required
-              disabled={isPending}
-              className="border-input focus-visible:border-ring focus-visible:ring-ring/50 disabled:bg-input/50 h-8 w-full min-w-0 appearance-none rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:ring-3 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-            >
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                  {account.bank ? ` · ${account.bank}` : ""}
-                </option>
-              ))}
-            </select>
+            <Label htmlFor="targetId">
+              {method === "credit" ? "De qual cartão" : "De qual conta"}
+            </Label>
+            {method === "credit" ? (
+              cards.length === 0 ? (
+                <p className="text-muted-foreground text-sm">
+                  Você ainda não tem cartão neste espaço.{" "}
+                  <Link
+                    href="/contas/cartoes/novo"
+                    className="underline underline-offset-4"
+                  >
+                    Criar cartão
+                  </Link>
+                </p>
+              ) : (
+                <select
+                  id="targetId"
+                  name="cardId"
+                  required
+                  disabled={isPending}
+                  className="border-input focus-visible:border-ring focus-visible:ring-ring/50 disabled:bg-input/50 h-8 w-full min-w-0 appearance-none rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:ring-3 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                >
+                  {cards.map((card) => (
+                    <option key={card.id} value={card.id}>
+                      {card.name}
+                    </option>
+                  ))}
+                </select>
+              )
+            ) : (
+              <select
+                id="targetId"
+                name="accountId"
+                required
+                disabled={isPending}
+                className="border-input focus-visible:border-ring focus-visible:ring-ring/50 disabled:bg-input/50 h-8 w-full min-w-0 appearance-none rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:ring-3 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+              >
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                    {account.bank ? ` · ${account.bank}` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div className="space-y-2">

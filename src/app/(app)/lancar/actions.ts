@@ -29,11 +29,16 @@ export type TransactionFormState = {
 /**
  * Meios aceitos pelo lançamento rápido.
  *
- * Crédito **não** entra aqui: ele é a Fatia 4, junto com parcelas e fatura.
- * Deixar o crédito fora agora evita a compra no cartão ter dois caminhos
- * diferentes vivendo ao mesmo tempo.
+ * Crédito entra aqui desde a Fase 5/6: na Fatia 4 ele ganha parcelas e fatura,
+ * mas a compra à vista no cartão já é um caminho de verdade desde agora.
  */
-const QUICK_PAYMENT_METHODS = ["pix", "cash", "debit", "boleto"] as const;
+const QUICK_PAYMENT_METHODS = [
+  "pix",
+  "cash",
+  "debit",
+  "boleto",
+  "credit",
+] as const;
 
 const optionalId = z
   .string()
@@ -59,9 +64,10 @@ const quickEntrySchema = z.object({
   // Texto livre: quem digita escreve "12,50", não "1250".
   amount: z.string().trim().min(1, "Informe o valor."),
   categoryId: optionalId,
-  accountId: z
-    .string()
-    .refine(isUuid, "Escolha de qual conta saiu o dinheiro."),
+  // Crédito vai para o cartão; o resto sai de uma conta. Quem exige um dos dois
+  // é a checagem depois do parse — espelho do CHECK do banco.
+  accountId: optionalId,
+  cardId: optionalId,
   occurredOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Confira a data."),
   paymentMethod: z.enum(QUICK_PAYMENT_METHODS, "Escolha como foi pago."),
 });
@@ -82,6 +88,7 @@ export async function createTransactionAction(
     amount: formData.get("amount"),
     categoryId: formData.get("categoryId"),
     accountId: formData.get("accountId"),
+    cardId: formData.get("cardId"),
     occurredOn: formData.get("occurredOn"),
     paymentMethod: formData.get("paymentMethod"),
   });
@@ -103,6 +110,16 @@ export async function createTransactionAction(
   const context = await requireHousehold();
   const scope = await getScope();
 
+  const usesCard = parsed.data.paymentMethod === "credit";
+
+  if (usesCard && parsed.data.cardId === null) {
+    return { error: "Escolha o cartão da compra." };
+  }
+
+  if (!usesCard && parsed.data.accountId === null) {
+    return { error: "Escolha de qual conta saiu o dinheiro." };
+  }
+
   const { error } = await createTransaction(
     { scope, userId: context.userId, householdId: context.household.id },
     {
@@ -111,8 +128,8 @@ export async function createTransactionAction(
       totalCents,
       occurredOn: parsed.data.occurredOn,
       paymentMethod: parsed.data.paymentMethod,
-      accountId: parsed.data.accountId,
-      cardId: null,
+      accountId: usesCard ? null : parsed.data.accountId,
+      cardId: usesCard ? parsed.data.cardId : null,
       installmentsCount: 1,
       notes: parsed.data.notes,
     },
@@ -188,6 +205,7 @@ export async function updateTransactionAction(
     amount: formData.get("amount"),
     categoryId: formData.get("categoryId"),
     accountId: formData.get("accountId"),
+    cardId: formData.get("cardId"),
     occurredOn: formData.get("occurredOn"),
     paymentMethod: formData.get("paymentMethod"),
   });
@@ -205,6 +223,16 @@ export async function updateTransactionAction(
     return { error: "Confira o valor: use algo como 12,50." };
   }
 
+  const usesCard = parsed.data.paymentMethod === "credit";
+
+  if (usesCard && parsed.data.cardId === null) {
+    return { error: "Escolha o cartão da compra." };
+  }
+
+  if (!usesCard && parsed.data.accountId === null) {
+    return { error: "Escolha de qual conta saiu o dinheiro." };
+  }
+
   await requireHousehold();
 
   const { error } = await updateTransaction(parsed.data.id, {
@@ -213,8 +241,8 @@ export async function updateTransactionAction(
     totalCents,
     occurredOn: parsed.data.occurredOn,
     paymentMethod: parsed.data.paymentMethod,
-    accountId: parsed.data.accountId,
-    cardId: null,
+    accountId: usesCard ? null : parsed.data.accountId,
+    cardId: usesCard ? parsed.data.cardId : null,
     installmentsCount: 1,
     notes: parsed.data.notes,
   });
