@@ -50,6 +50,12 @@ const quickEntrySchema = z.object({
     .trim()
     .min(1, "Escreva no que foi o gasto.")
     .max(80, "A descrição está longa demais."),
+  // Descrição livre, opcional: o rótulo curto fica em `description`.
+  notes: z
+    .string()
+    .trim()
+    .max(500, "A descrição está longa demais.")
+    .transform((value) => (value === "" ? null : value)),
   // Texto livre: quem digita escreve "12,50", não "1250".
   amount: z.string().trim().min(1, "Informe o valor."),
   categoryId: optionalId,
@@ -72,6 +78,7 @@ export async function createTransactionAction(
 ): Promise<TransactionFormState> {
   const parsed = quickEntrySchema.safeParse({
     description: formData.get("description"),
+    notes: formData.get("notes"),
     amount: formData.get("amount"),
     categoryId: formData.get("categoryId"),
     accountId: formData.get("accountId"),
@@ -107,7 +114,7 @@ export async function createTransactionAction(
       accountId: parsed.data.accountId,
       cardId: null,
       installmentsCount: 1,
-      notes: null,
+      notes: parsed.data.notes,
     },
   );
 
@@ -177,6 +184,7 @@ export async function updateTransactionAction(
   const parsed = updateSchema.safeParse({
     id: formData.get("id"),
     description: formData.get("description"),
+    notes: formData.get("notes"),
     amount: formData.get("amount"),
     categoryId: formData.get("categoryId"),
     accountId: formData.get("accountId"),
@@ -208,7 +216,7 @@ export async function updateTransactionAction(
     accountId: parsed.data.accountId,
     cardId: null,
     installmentsCount: 1,
-    notes: null,
+    notes: parsed.data.notes,
   });
 
   if (error) {

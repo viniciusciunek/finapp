@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { labelForPaymentMethod } from "@/domain/transaction";
 import { normalizeCategoryName } from "@/domain/category";
+import { sanitizeAmountInput } from "@/domain/money";
 import { formatCentsForInput } from "@/lib/format";
 import type { Account } from "@/server/accounts";
 import type { Category } from "@/server/categories";
@@ -54,6 +55,7 @@ type QuickEntryFormProps =
         paymentMethod: string;
         categoryId: string | null;
         accountId: string | null;
+        notes: string | null;
       };
     };
 
@@ -76,6 +78,10 @@ export function QuickEntryForm(props: QuickEntryFormProps) {
   const [state, formAction, isPending] = useActionState(
     isCreate ? createTransactionAction : updateTransactionAction,
     initialState,
+  );
+  // O valor é controlado para o sanitizador poder agir enquanto se digita.
+  const [amountText, setAmountText] = useState(
+    initial ? formatCentsForInput(initial.totalCents) : "",
   );
   const [method, setMethod] = useState<Method>(
     isMethod(initial?.paymentMethod) ? initial.paymentMethod : "pix",
@@ -170,8 +176,9 @@ export function QuickEntryForm(props: QuickEntryFormProps) {
               required
               autoFocus={isCreate}
               disabled={isPending}
-              defaultValue={
-                initial ? formatCentsForInput(initial.totalCents) : undefined
+              value={amountText}
+              onChange={(event) =>
+                setAmountText(sanitizeAmountInput(event.target.value))
               }
             />
           </div>
@@ -187,6 +194,19 @@ export function QuickEntryForm(props: QuickEntryFormProps) {
               required
               disabled={isPending}
               defaultValue={initial?.description ?? ""}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="notes">Descrição (opcional)</Label>
+            <Input
+              id="notes"
+              name="notes"
+              type="text"
+              placeholder="Lanche do Pigalle, com cupom"
+              maxLength={500}
+              disabled={isPending}
+              defaultValue={initial?.notes ?? ""}
             />
           </div>
 
