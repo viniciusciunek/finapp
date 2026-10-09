@@ -44,8 +44,13 @@ const SUPABASE_KEY = process.env.RLS_TEST_KEY ?? "";
 const TEST_HOUSEHOLD_NAME = "Família de teste (RLS)";
 
 /**
- * Contas de teste reutilizadas a cada execução. Não são segredos: vivem apenas
- * no projeto de desenvolvimento e não têm acesso a dado nenhum além do cenário.
+ * Contas de teste reutilizadas a cada execução.
+ *
+ * As credenciais estão escritas aqui **de propósito**, e o repositório é
+ * público: qualquer pessoa as lê. Isso é aceitável só porque elas existem em
+ * bancos **descartáveis** — o Supabase local de desenvolvimento e o que sobe
+ * dentro do CI. Se algum dia este teste apontar para um projeto de verdade,
+ * apague estas contas por lá: a senha está à vista.
  */
 const USER_A = {
   email: "rls-teste+a@example.com",
