@@ -1482,4 +1482,67 @@ done
 
 **Fechamento:** o critério do roadmap foi atendido em 2026-10-09 — as contas e cartões reais entraram pelo app, nos dois escopos, e cada um aparece na visão certa. O deploy fica para quando o app tiver uso dos dois (não é pendência desta fatia).
 
+---
+
+### P23 — Fatia 3: lançamento rápido (fases 1 a 6) · 2026-10-09
+
+**Pedido:** a Fatia 3 do `ROADMAP.md` — formulário mobile-first de despesa, lista com filtro por mês, editar/excluir, categorias básicas e criação de categoria no próprio formulário.
+
+**Como foi feito:** seis fases pequenas, cada uma verde antes da seguinte — banco → regras puras → acesso a dados → tela de lançar → lista do mês → fechamento. No meio do caminho entraram quatro pedidos do usuário que mudaram o desenho (abaixo).
+
+**Decisões desta fatia**
+
+| # | Decisão | Por quê |
+|---|---|---|
+| D22 | `account_id`/`card_id` com `on delete restrict` | A pendência que o `DOMAIN.md` §2 tinha para esta fatia: apagar conta com lançamento é recusado, o histórico não some |
+| D23 | `category_id` com `on delete set null` | Apagar categoria não pode apagar o que já foi gasto |
+| D24 | Categorias básicas nascem com a **família** (trigger), não como lista global | Cada casal renomeia e apaga as suas sem tocar nas de ninguém |
+| D25 | `assert_transaction_references()` no banco | O RLS **não** cobre a chave estrangeira (é checada como dona da tabela): sem essa função daria para apontar um lançamento para a conta de outra pessoa sabendo o id |
+| D26 | **Crédito entra na Fatia 3**, não na 4 | Sem isso, a compra no cartão ficaria sem lugar até as parcelas existirem. Parcelas e fatura com valor real continuam na Fatia 4 |
+| D27 | Fatura do mês é **soma derivada**, não registro guardado | Editar ou apagar um lançamento recalcula sozinho — não existe número guardado para desencontrar do que está na tela. A fatura com "real" informado à mão é a Fatia 4 (`DOMAIN.md` §4.3) |
+| D28 | Regra do fechamento isolada em `resolveStatementMonth`, com a premissa escrita no código | O §4.1 avisa que o tratamento do **próprio dia do fechamento** varia por banco: compra até o dia do fechamento (inclusive) fica no mês; depois, no seguinte. Validar com uma compra real em cada cartão — se algum banco tratar diferente, muda-se só a função e seus testes |
+| D29 | Descrição livre em `notes`, separada do rótulo "No que foi" | Coluna que já existia desde a G1; o rótulo é o apelido curto ("lanche"), a descrição é o contexto |
+
+**Verificação (navegador, contra o Supabase local, com limpeza depois)**
+
+| Fase | Evidência |
+|---|---|
+| Tela de lançar | Lançar "Futebol, 12,50, Pix" levou **198 ms** do primeiro toque até voltar para a lista |
+| Lista do mês | Três lançamentos (dois em outubro, um em setembro): outubro mostrou os dois e **total R$ 20,50**; a seta "←" levou a `?mes=2026-09` e mostrou só o de setembro |
+| Editar e apagar | Valor voltou preenchido como "12,50"; salvar 15,00 refletiu na lista; apagar em dois toques sumiu com o item e zerou o total |
+| Valor e descrição | Digitar `abc30,00123` deixou o campo em **"30,00"**; a descrição gravou em `notes` |
+| Crédito e fatura | Compra de R$ 30,00 no crédito: no banco, `payment_method = credit`, **com cartão e sem conta**; na tela de contas, "**Fatura de outubro de 2026: R$ 30,00**" (compra antes do fechamento, na fatura do mês) |
+
+**Dívida conhecida, anotada em vez de escondida:** a trava "Crie uma conta primeiro" na tela de lançar olha só as contas — quem tem cartão e nenhuma conta fica sem conseguir lançar no crédito. Ajuste pequeno, para quando a tela for reaberta.
+
+**Dívida de código:** o tipo `Ownership` está repetido em `accounts.ts` e `credit-cards.ts` (e os módulos novos importam de `accounts.ts` para não criar uma terceira cópia). O lugar certo é `domain/scope.ts` — limpeza curta, sem pressa.
+
+**Arquivos deste passo**
+
+- `src/domain/`: `category.ts`, `transaction.ts`, `month.ts`, `statement.ts`, `money.ts` (`parseCentsFromText`, `sanitizeAmountInput`)
+- `src/server/`: `categories.ts`, `transactions.ts`
+- `src/app/(app)/lancar/**` (tela, formulário e edição) e a Visão geral virando lista do mês
+- `src/integration/transactions-isolation.integration.test.ts`
+
+---
+
+## Resumo da Fatia 3 — concluída (fases 1 a 6)
+
+**Critério do `ROADMAP.md`:** *"lançar 'futebol, R$ 12, Pix, Mercado Pago' leva menos de 15 segundos"* — **atendido e verificado no navegador**: valor, no que foi, e um toque para lançar (meio e data já vêm prontos).
+
+| Fase | Situação |
+|---|---|
+| 1 — Banco | ✅ `categories` e `transactions` com escopo, RLS, `restrict`, `assert_transaction_references` e categorias básicas por família |
+| 2 — Regras puras | ✅ meios de pagamento, limites, nome de categoria |
+| 3 — Acesso a dados | ✅ `src/server/categories.ts` e `transactions.ts` |
+| 4 — Lançar | ✅ `/lancar` com valor primeiro e chips; 198 ms no teste |
+| 5 — Lista, editar, apagar, categoria e fatura | ✅ lista do mês na Visão geral, edição com o mesmo formulário, dois toques para apagar, categoria criada ali mesmo, crédito com cartão e fatura derivada |
+| 6 — Fechamento | ✅ este passo |
+
+**Números:** 90 testes unitários · 35 de isolamento · 19 rotas · 0 erros de lint, tipo, teste ou build.
+
+**O que ainda não existe (e onde entra):** parcelas (`splitInstallments`), fatura com valor real e tela própria da fatura são a **Fatia 4** — a soma calculada já está pronta e é o insumo dela.
+
+**Pendências do projeto:** o deploy (quando o app tiver uso dos dois) e as duas dívidas curtas deste passo (trava da tela de lançar e o tipo `Ownership`).
+
 
