@@ -24,8 +24,42 @@ export function resolveStatementMonth(
   const [year, month, day] = occurredOn.split("-").map(Number);
   const monthKey = `${year}-${String(month).padStart(2, "0")}`;
 
-  const lastDay = Number(monthRange(monthKey).to.slice(8, 10));
-  const effectiveClosingDay = Math.min(closingDay, lastDay);
+  return day <= effectiveDayInMonth(monthKey, closingDay)
+    ? monthKey
+    : shiftMonth(monthKey, 1);
+}
 
-  return day <= effectiveClosingDay ? monthKey : shiftMonth(monthKey, 1);
+/**
+ * Datas de fechamento e vencimento de uma fatura, a partir dos dias do cartão.
+ *
+ * (`DOMAIN.md` §4.1) A fatura de setembro fecha em **setembro** e vence em
+ * **outubro** — o vencimento é sempre no mês seguinte ao de referência. Dias
+ * 29–31 em mês curto valem o último dia do mês: fevereiro de 2026 não tem 31.
+ */
+export function statementDates(
+  referenceMonth: string,
+  closingDay: number,
+  dueDay: number,
+): { closingDate: string; dueDate: string } {
+  return {
+    closingDate: dateInMonth(referenceMonth, closingDay),
+    dueDate: dateInMonth(shiftMonth(referenceMonth, 1), dueDay),
+  };
+}
+
+/**
+ * Dia `day` dentro do mês, em `YYYY-MM-DD`, limitado ao último dia do mês —
+ * o mesmo tratamento que o dia do fechamento recebe em `resolveStatementMonth`.
+ */
+function dateInMonth(monthKey: string, day: number): string {
+  const effectiveDay = effectiveDayInMonth(monthKey, day);
+
+  return `${monthKey}-${String(effectiveDay).padStart(2, "0")}`;
+}
+
+/** O dia pedido, ou o último do mês quando o mês é mais curto que ele. */
+function effectiveDayInMonth(monthKey: string, day: number): number {
+  const lastDay = Number(monthRange(monthKey).to.slice(8, 10));
+
+  return Math.min(day, lastDay);
 }

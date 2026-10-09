@@ -98,7 +98,7 @@ São necessárias porque uma policy em `household_members` que consultasse a pr�
 
 ### 4.2 Parcelamento
 - Compra de `total_cents` em `n` parcelas gera `n` registros em `card_installments`, a parcela `k` na fatura de `reference_month + (k − 1)` meses.
-- Divisão exata em centavos: `base = floor(total / n)`; o **resto** vai para a **primeira** parcela (a soma das parcelas sempre é igual ao total).
+- Divisão exata em centavos: `base = floor(total / n)`; o **resto** vai para a **primeira** parcela (a soma das parcelas sempre é igual ao total). Cada parcela tem ao menos 1 centavo: a compra não se divide em mais parcelas do que centavos.
 - Editar ou excluir o lançamento recalcula as parcelas ainda não pagas; parcelas em fatura **paga** não mudam sem confirmação explícita.
 
 ### 4.3 Fatura: calculado vs. real
