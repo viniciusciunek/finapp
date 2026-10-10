@@ -254,6 +254,50 @@ export async function listStatementsForMonths(
   };
 }
 
+/**
+ * Faturas por id, com calculado e efetivo.
+ *
+ * A folha (Fatia 5) lê por aqui os números dos itens de fatura — a fonte é o
+ * `statement` (D38), nunca uma cópia no item.
+ */
+export async function listStatementsByIds(
+  statementIds: readonly string[],
+): Promise<{ statements: StatementSummary[]; error: string | null }> {
+  const ids = [...new Set(statementIds)];
+
+  if (ids.length === 0) {
+    return { statements: [], error: null };
+  }
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("statements")
+    .select(STATEMENT_COLUMNS)
+    .in("id", ids);
+
+  if (error) {
+    return {
+      statements: [],
+      error: toUserMessage(error, "Não foi possível carregar as faturas."),
+    };
+  }
+
+  const rows: StatementRow[] = data ?? [];
+  const { sums, error: sumsError } = await sumInstallmentsFor(
+    rows.map((row) => row.id),
+  );
+
+  if (sumsError) {
+    return { statements: [], error: sumsError };
+  }
+
+  return {
+    statements: rows.map((row) => toSummary(row, sums.get(row.id) ?? 0)),
+    error: null,
+  };
+}
+
 /** Um lançamento (parcela) que compõe o calculado de uma fatura (§4.3). */
 export type StatementItem = {
   installmentNumber: number;
