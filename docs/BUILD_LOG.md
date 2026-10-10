@@ -1547,4 +1547,56 @@ done
 
 **Pendências do projeto:** o deploy (quando o app tiver uso dos dois). As duas dívidas curtas do passo — a trava da tela de lançar e o tipo `Ownership` — foram resolvidas no mesmo dia (`21be65e` e o commit seguinte).
 
+---
+
+## P24 — Fatia 4: cartão, parcelas e faturas (concluída)
+
+**Critério do `ROADMAP.md`:** *"uma compra parcelada aparece nas faturas dos meses certos e a soma das parcelas fecha com o total"* — **atendido e verificado no navegador**: 100,00 em 3x no crédito → faturas de outubro, novembro e dezembro com 3334 + 3333 + 3333 centavos (fecha exato), fechando dia 20 e vencendo dia 5 do mês seguinte; `/contas` mostrou só a primeira parcela (R$ 33,34); a tela da fatura mostrou calculado, real e não lançado; pagamento vira "Paga" e 0,00 desfaz.
+
+**Fases (cada uma com commit e verificação própria):**
+
+| Fase | Commit | O quê |
+|---|---|---|
+| 1 — Banco | `e6718d2` | `statements` + `card_installments` |
+| 2 — Regras puras | `11b1a0c` | `splitInstallments`, `installmentStatementMonth`, `statementDates` |
+| 3 — Dados + backfill | `3001c3d` | crédito grava faturas/parcelas; guarda §4.2; backfill idempotente |
+| 4 — Lançar parcelado | `dbfb0a6` | campo "Em quantas vezes" com prévia; lista "Crédito · 3x de…"; `/contas` soma por parcela |
+| 5 — Tela da fatura | `857900d` | calculado × real × não lançado, histórico, pagamento |
+
+**Decisões (D30–D35):**
+
+| # | Decisão | Por quê |
+|---|---|---|
+| D30 | Escopo explícito + asserts próprios em `statements`/`card_installments` | Mesmo molde das tabelas anteriores; o RLS não cobre FK (lição D25) |
+| D31 | `reference_month` texto `AAAA-MM`; `calculated_cents`/`effective_cents` **não** são colunas | O formato que o app inteiro já usa; derivar a soma impede que ela desencontre das parcelas (§2) |
+| D32 | `transaction_id` cascade; `statement_id` e `statements.card_id` restrict | A parcela é parte do lançamento; fatura e histórico não somem por engano |
+| D33 | Cada parcela tem ao menos 1 centavo; vencimento sempre no mês seguinte ao de referência | R$ 0,10 não se divide em 48x; "setembro fecha em setembro e vence em outubro" (§4.1) |
+| D34 | Fatura paga recusa mudar/excluir o lançamento, e o create compensa falha de parcelas | §4.2 manda proteger fatura paga; sem parcelas a compra no crédito ficaria fora dela |
+| D35 | `status` guardado acompanha o pagamento; aberta/fechada é **derivado** por data; pagamento ainda sem conta de origem | `closed` nunca é gravado (a tela decide o momento); a conta entra com o saldo de contas (Fatia 8) |
+
+**Lições registradas:**
+
+- O quarto arquivo de teste de isolamento expôs **duas corridas latentes nas fixtures**: `ensureHousehold` lia os vínculos sem filtrar o usuário (a policy deixa o membro ler os da família; com B dentro, o `maybeSingle` vê duas linhas) e `joinHousehold` exigia B fora. A suíte roda arquivos **em sequência, mas em ordem que não é nossa** — fixture que monta estado compartilhado precisa ser idempotente ("garantir X", não "fazer X agora").
+- Prettier recolapsula import de uma linha: âncora de edição nesse bloco **sempre** se confere no disco antes.
+- Um teste que passa por sorte é dívida: as duas correções acima nasceram de rodar a suíte **duas vezes seguidas** de propósito.
+- O backfill é a rede de segurança que torna a troca de fonte da verdade indolor: sem ele, a tela nova da fatura esconderia as compras reais feitas antes da fatia.
+
+**Pendências do projeto:** o deploy (quando o app tiver uso dos dois); a tela da fatura não escolhe a **conta de origem** do pagamento (entra com o saldo, Fatia 8); o status `closed` do banco nunca é gravado (derivado na tela por `isStatementOpen`); a regra do dia do fechamento segue para validar com uma compra real em cada cartão (§4.1).
+
+---
+
+## Resumo da Fatia 4 — concluída (fases 1 a 5)
+
+| Fase | Situação |
+|---|---|
+| 1 — Banco | ✅ `statements` (uma por cartão e mês) e `card_installments` (cascade/restrict) com escopo, RLS e asserts |
+| 2 — Regras puras | ✅ divisão com resto na primeira parcela, mês de cada parcela, datas de fechamento/vencimento |
+| 3 — Dados | ✅ crédito grava faturas e parcelas; edição recalcula; exclusão cascateia; fatura paga protegida; backfill das compras antigas (local e nuvem) |
+| 4 — Lançar parcelado | ✅ 1x a 48x com prévia; lista mostra "3x de R$ X"; fatura aberta soma por parcela |
+| 5 — Tela da fatura | ✅ calculado × real × não lançado + histórico + pagamento (paga/parcial/desfazer) |
+
+**Números:** 105 testes unitários · 50 de isolamento · 20 rotas · 0 erros de lint, tipo, teste ou build.
+
+**O que ainda não existe (e onde entra):** a **Folha do mês** (Fatia 5) — que inclui um item de fatura por cartão, sincronizado com o `effective_cents` dela; o **saldo de contas** (Fatia 8) — que passa a debitar `paid_cents` da conta escolhida no pagamento.
+
 

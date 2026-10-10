@@ -106,6 +106,7 @@ São necessárias porque uma policy em `household_members` que consultasse a pr�
 - A interface mostra: calculado, real e **não lançado** (diferença), além do histórico de lançamentos que compõem o calculado.
 - O que vale para pagar e para os totais é `effective_cents`.
 - Pagamento parcial → status `partial`; pagamento integral → `paid`. `paid_cents` é editável.
+- Fechar por **data** não muda o registro: a tela deriva "aberta/fechada" de `closing_date` (função pura `isStatementOpen`); o `status` gravado acompanha o **pagamento** (`open`/`partial`/`paid`; `closed` existe no CHECK para o futuro, mas o app ainda não o grava).
 - Se o saldo de contas estiver ativo, pagar fatura debita `paid_cents` da conta escolhida. **Compra no cartão nunca mexe no saldo de conta; o pagamento da fatura mexe.** Isso evita contar a despesa duas vezes.
 
 ### 4.4 Folha do mês

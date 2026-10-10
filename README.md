@@ -7,7 +7,7 @@ Sistema de finanças pessoais e da família para o Vinícius e a Isabelle — su
 - **Ordem de construção (fatias):** [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - **Histórico detalhado do que foi feito e por quê:** [`docs/BUILD_LOG.md`](docs/BUILD_LOG.md)
 
-> **Estado atual:** **Fatia 1 (Login e família) concluída.** Dá para criar conta, formar a família, convidar a outra pessoa por código e alternar entre a visão pessoal e a da família — com os testes de isolamento rodando no CI a cada push. Falta só o deploy (adiado). Próxima fatia: contas e cartões.
+> **Estado atual:** **Fatias 1 a 4 concluídas** — login e família, contas e cartões, lançamento rápido e o cartão de crédito com parcelas e faturas (calculado × real × não lançado, com registro de pagamento). Os testes de isolamento rodam no CI a cada push; o deploy segue adiado. Próxima fatia: a **Folha do mês**.
 
 ## Stack
 
@@ -68,8 +68,9 @@ O `dev:local` troca apenas as variáveis de ambiente do processo — o `.env.loc
 | `/login` · `/signup` | Entrada e cadastro (quem já está logado é levado direto para o app) |
 | `/onboarding` | Criar a família ou entrar com um código de convite |
 | `/` | Lista do mês — navegação entre meses, agrupamento por dia e total; a Folha do mês entra aqui na Fatia 5 |
-| `/contas` | Contas e cartões do escopo ativo (só seus ou da família) — criar, editar e apagar, com o limite do cartão digitado em reais e a fatura do mês no cartão |
-| `/lancar` | Lançamento rápido — valor, no que foi, descrição opcional, categoria e forma de pagamento (Pix, dinheiro, débito, boleto ou crédito no cartão) |
+| `/contas` | Contas e cartões do escopo ativo (só seus ou da família) — criar, editar e apagar, com o limite do cartão digitado em reais e a **fatura aberta** de cada cartão |
+| `/contas/cartoes/[id]/fatura` | Fatura de um cartão: **calculado × valor real × não lançado**, histórico de parcelas e registro de pagamento (o total vira "paga", a menos fica parcial, 0,00 desfaz); as setas navegam os meses |
+| `/lancar` | Lançamento rápido — valor, no que foi, descrição opcional, categoria e forma de pagamento (Pix, dinheiro, débito, boleto ou **crédito no cartão, de 1x a 48x**) |
 | `/familia` | Quem está na família, gerar convite (com botão copiar) e cancelar convites em aberto |
 | `/perfil` | Nome, e-mail, papel na família, sair da família e sair da conta |
 
@@ -118,8 +119,10 @@ npx supabase migration new nome_da_migration
 |---|---|
 | `20261008180810_identity_and_households.sql` | `profiles`, `user_settings`, `households`, `household_members`, `household_invites`, as funções de associação (`create_household`, `accept_household_invite`, `leave_household`) e as **10 policies de RLS** |
 | `20261009141956_backfill_identity_for_existing_users.sql` | Cria `profiles`/`user_settings` para contas que existiam antes do trigger de cadastro (idempotente) |
-
-> Depois de mudar o schema e aplicar a migration, rode `npm run db:types` para os tipos acompanharem.
+| `20261009122953_accounts_and_credit_cards.sql` | Contas e cartões de crédito — escopo, RLS, dias de fechamento/vencimento e limite |
+| `20261009150000_categories_and_transactions.sql` | Categorias e lançamentos — escopo, RLS, `on delete restrict` para conta/cartão e categorias básicas por família |
+| `20261009170000_statements_and_installments.sql` | Faturas e parcelas — uma fatura por cartão e mês; a parcela liga lançamento e fatura do mesmo cartão |
+| `20261009190000_backfill_credit_installments.sql` | Cria faturas e parcelas para as compras no crédito que já existiam (idempotente) |
 
 ### Testar o banco localmente (opcional, recomendado)
 
