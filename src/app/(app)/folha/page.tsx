@@ -26,6 +26,12 @@ import { requireHousehold } from "@/server/session";
 import { listSheet, openSheet, type SheetItemView } from "@/server/sheets";
 
 import { setIncludeFamilyAction } from "./actions";
+import { ItemActions } from "./_components/item-actions";
+import { OneOffForm } from "./_components/one-off-form";
+import {
+  CloseSheetSection,
+  ReopenSheetButton,
+} from "./_components/sheet-closing";
 
 export const metadata: Metadata = {
   title: "Folha",
@@ -36,7 +42,8 @@ export const metadata: Metadata = {
  *
  * Só abrir a tela já **gera** a folha do mês (o top-up idempotente do
  * servidor): a pessoa não "cria" nada — as fixas e as faturas viram itens
- * sozinhas. Esta fase é de leitura; os formulários chegam na fase 6.
+ * sozinhas. Com a folha aberta, cada linha ganha as ações (fase 6): valor
+ * real, pagar, levar e apagar pontual; fechar/reabrir ficam no fim da tela.
  *
  * Status nunca vem gravado: é calculado (`sheetItemStatus`) — o dia do
  * vencimento vale o dia inteiro. "Levada" é o item que já foi para o mês
@@ -173,6 +180,7 @@ function ItemRow({
   today,
   familyItemIds,
   memberNames,
+  canEdit,
 }: {
   item: SheetItemView;
   month: string;
@@ -181,6 +189,8 @@ function ItemRow({
   familyItemIds: Set<string>;
   /** Nome do pagador, na visão da família (§4.6). */
   memberNames: Map<string, string>;
+  /** Folha aberta: a linha ganha as ações (§4.4 — fechada é só leitura). */
+  canEdit: boolean;
 }) {
   const chip = chipKeyFor(item, today);
   const parts: ReactNode[] = [];
@@ -250,6 +260,7 @@ function ItemRow({
         <Meta parts={parts} />
         <StatusChip chip={chip} />
       </div>
+      {canEdit ? <ItemActions item={item} /> : null}
     </li>
   );
 }
@@ -372,9 +383,12 @@ async function SheetContent({
       <MonthNav month={month} />
 
       {sheet.status === "closed" ? (
-        <div className="rounded-xl border border-dashed p-3 text-sm">
-          Folha fechada — este mês já foi conferido; por aqui, ela fica só de
-          leitura.
+        <div className="space-y-2 rounded-xl border border-dashed p-3">
+          <p className="text-sm">
+            Folha fechada — este mês já foi conferido; por aqui, ela fica só de
+            leitura.
+          </p>
+          <ReopenSheetButton month={month} />
         </div>
       ) : null}
 
@@ -473,6 +487,7 @@ async function SheetContent({
                     today={today}
                     familyItemIds={familyItemIds}
                     memberNames={memberNames}
+                    canEdit={sheet.status === "open"}
                   />
                 ))}
               </ul>
@@ -480,6 +495,12 @@ async function SheetContent({
           );
         })
       )}
+
+      {sheet.status === "open" ? <OneOffForm month={month} /> : null}
+
+      {sheet.status === "open" && items.length > 0 ? (
+        <CloseSheetSection month={month} />
+      ) : null}
     </div>
   );
 }
