@@ -45,6 +45,16 @@ export const USER_B = {
   password: "teste-rls-usuario-b",
 };
 
+/**
+ * Usuário **fora** da família de A — existe para provar o que o RLS não cobre
+ * sozinho: pagador de item da família precisa ser membro (Fatia 5), e a checagem
+ * roda por trigger, não por policy.
+ */
+export const USER_C = {
+  email: "rls-teste+c@example.com",
+  password: "teste-rls-usuario-c",
+};
+
 /** Falha cedo (e explicando o que fazer) quando faltam as credenciais de teste. */
 export function requireTestCredentials(): void {
   if (!SUPABASE_URL || !SUPABASE_KEY) {

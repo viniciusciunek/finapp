@@ -169,6 +169,26 @@ isOneToOne: false
                   Relationships: [
                     
                   ]
+                },"month_sheets": {
+                  Row: {
+                    "created_at": string,"created_by": string | null,"household_id": string | null,"id": string,"owner_user_id": string | null,"planned_close_date": string,"reference_month": string,"scope": string,"status": string,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"created_by"?: string | null,"household_id"?: string | null,"id"?: string,"owner_user_id"?: string | null,"planned_close_date": string,"reference_month": string,"scope"?: string,"status"?: string,"updated_at"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"created_by"?: string | null,"household_id"?: string | null,"id"?: string,"owner_user_id"?: string | null,"planned_close_date"?: string,"reference_month"?: string,"scope"?: string,"status"?: string,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "month_sheets_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"profiles": {
                   Row: {
                     "created_at": string,"created_by": string,"email": string,"id": string,"name": string,"updated_at": string
@@ -182,6 +202,82 @@ isOneToOne: false
                   }
                   Relationships: [
                     
+                  ]
+                },"recurring_templates": {
+                  Row: {
+                    "active": boolean,"category_id": string | null,"created_at": string,"created_by": string | null,"default_amount_cents": number,"due_day": number,"frequency": string,"household_id": string | null,"id": string,"name": string,"owner_user_id": string | null,"payer_user_id": string | null,"scope": string,"updated_at": string,"yearly_month": number | null
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "active"?: boolean,"category_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"default_amount_cents": number,"due_day": number,"frequency"?: string,"household_id"?: string | null,"id"?: string,"name": string,"owner_user_id"?: string | null,"payer_user_id"?: string | null,"scope"?: string,"updated_at"?: string,"yearly_month"?: number | null
+                  }
+                  Update: {
+                    "active"?: boolean,"category_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"default_amount_cents"?: number,"due_day"?: number,"frequency"?: string,"household_id"?: string | null,"id"?: string,"name"?: string,"owner_user_id"?: string | null,"payer_user_id"?: string | null,"scope"?: string,"updated_at"?: string,"yearly_month"?: number | null
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "recurring_templates_category_id_fkey"
+      columns: ["category_id"]
+isOneToOne: false
+      referencedRelation: "categories"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "recurring_templates_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    }
+                  ]
+                },"sheet_items": {
+                  Row: {
+                    "actual_cents": number | null,"carried_from_item_id": string | null,"created_at": string,"created_by": string | null,"due_date": string | null,"expected_cents": number,"household_id": string | null,"id": string,"name": string,"owner_user_id": string | null,"paid_at": string | null,"paid_cents": number,"paid_from_account_id": string | null,"payer_user_id": string | null,"scope": string,"sheet_id": string,"source": string,"statement_id": string | null,"template_id": string | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "actual_cents"?: number | null,"carried_from_item_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"due_date"?: string | null,"expected_cents": number,"household_id"?: string | null,"id"?: string,"name": string,"owner_user_id"?: string | null,"paid_at"?: string | null,"paid_cents"?: number,"paid_from_account_id"?: string | null,"payer_user_id"?: string | null,"scope"?: string,"sheet_id": string,"source": string,"statement_id"?: string | null,"template_id"?: string | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "actual_cents"?: number | null,"carried_from_item_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"due_date"?: string | null,"expected_cents"?: number,"household_id"?: string | null,"id"?: string,"name"?: string,"owner_user_id"?: string | null,"paid_at"?: string | null,"paid_cents"?: number,"paid_from_account_id"?: string | null,"payer_user_id"?: string | null,"scope"?: string,"sheet_id"?: string,"source"?: string,"statement_id"?: string | null,"template_id"?: string | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "sheet_items_carried_from_item_id_fkey"
+      columns: ["carried_from_item_id"]
+isOneToOne: false
+      referencedRelation: "sheet_items"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "sheet_items_household_id_fkey"
+      columns: ["household_id"]
+isOneToOne: false
+      referencedRelation: "households"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "sheet_items_paid_from_account_id_fkey"
+      columns: ["paid_from_account_id"]
+isOneToOne: false
+      referencedRelation: "accounts"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "sheet_items_sheet_id_fkey"
+      columns: ["sheet_id"]
+isOneToOne: false
+      referencedRelation: "month_sheets"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "sheet_items_statement_id_fkey"
+      columns: ["statement_id"]
+isOneToOne: false
+      referencedRelation: "statements"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "sheet_items_template_id_fkey"
+      columns: ["template_id"]
+isOneToOne: false
+      referencedRelation: "recurring_templates"
+      referencedColumns: ["id"]
+    }
                   ]
                 },"statements": {
                   Row: {

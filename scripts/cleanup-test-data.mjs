@@ -39,12 +39,13 @@ import { createClient } from "@supabase/supabase-js";
  * Contas que os testes e os roteiros manuais deste repositório criam.
  *
  * **Ao criar uma conta de teste nova, anote aqui.** É esta lista que faz a
- * limpeza encontrá-la depois. O teste de RLS usa as duas primeiras
- * (`src/integration/rls-isolation.integration.test.ts`).
+ * limpeza encontrá-la depois. Os testes de isolamento usam `+a`, `+b` e `+c`
+ * (a `+c` existe para provar que só membro da família pode ser pagador).
  */
 const TEST_EMAILS = [
   "rls-teste+a@example.com",
   "rls-teste+b@example.com",
+  "rls-teste+c@example.com",
   "teste.fase3@example.com",
   "teste.fase3.b@example.com",
 ];
