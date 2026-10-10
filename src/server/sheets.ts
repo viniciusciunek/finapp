@@ -1,3 +1,4 @@
+import { isCents } from "@/domain/money";
 import { dateInMonth, isMonthKey, shiftMonth } from "@/domain/month";
 import {
   ownershipForScope,
@@ -5,12 +6,21 @@ import {
   type Ownership,
   type Scope,
 } from "@/domain/scope";
-import { plannedCloseDate, suggestedExpectedCents } from "@/domain/sheet";
+import {
+  isItemPaid,
+  plannedCloseDate,
+  suggestedExpectedCents,
+} from "@/domain/sheet";
 import { createClient } from "@/lib/supabase/server";
 
 import { listCreditCards } from "./credit-cards";
 import { toUserMessage } from "./errors";
-import { listStatementsByIds, listStatementsForMonths } from "./statements";
+import {
+  listStatementsByIds,
+  listStatementsForMonths,
+  registerStatementPayment,
+  setStatementActualCents,
+} from "./statements";
 
 /**
  * Folhas do mês — camada de acesso a dados (Fatia 5, DOMAIN.md §4.4).
@@ -631,4 +641,547 @@ export async function listRecurringTemplates(
   }
 
   return { templates: (data ?? []).map(toTemplate), error: null };
+}
+
+// ---------------------------------------------------------------------------
+// Mutações (fase 4/8)
+//
+// Regra de ouro: folha **fechada é somente leitura NA FOLHA** — reabra para
+// mexer. A tela da fatura mantém a vida própria dela; pagar lá reflete aqui,
+// porque item de fatura é espelho (D38).
+// ---------------------------------------------------------------------------
+
+const MUTATION_ITEM_COLUMNS =
+  "id, sheet_id, scope, owner_user_id, household_id, source, template_id, statement_id, name, expected_cents, actual_cents, due_date, payer_user_id, paid_cents, carried_from_item_id";
+
+type MutationItemRow = {
+  id: string;
+  sheet_id: string;
+  scope: string;
+  owner_user_id: string | null;
+  household_id: string | null;
+  source: string;
+  template_id: string | null;
+  statement_id: string | null;
+  name: string;
+  expected_cents: number;
+  actual_cents: number | null;
+  due_date: string | null;
+  payer_user_id: string | null;
+  paid_cents: number;
+  carried_from_item_id: string | null;
+};
+
+/**
+ * Carrega o item e a folha dele — a base de todas as mutações: o status da
+ * folha manda (fechada = somente leitura) e o mês dela é o que "levar" usa.
+ */
+async function findItemWithSheet(itemId: string): Promise<{
+  value: {
+    item: MutationItemRow;
+    sheet: { id: string; status: string; reference_month: string };
+  } | null;
+  error: string | null;
+}> {
+  const supabase = await createClient();
+
+  const { data: item, error } = await supabase
+    .from("sheet_items")
+    .select(MUTATION_ITEM_COLUMNS)
+    .eq("id", itemId)
+    .maybeSingle();
+
+  if (error) {
+    return {
+      value: null,
+      error: toUserMessage(error, "Não foi possível carregar o item."),
+    };
+  }
+
+  if (!item) {
+    return { value: null, error: null };
+  }
+
+  const { data: sheet, error: sheetError } = await supabase
+    .from("month_sheets")
+    .select("id, status, reference_month")
+    .eq("id", item.sheet_id)
+    .maybeSingle();
+
+  if (sheetError || !sheet) {
+    return {
+      value: null,
+      error: sheetError
+        ? toUserMessage(sheetError, "Não foi possível carregar a folha.")
+        : "Esta folha não existe mais.",
+    };
+  }
+
+  return { value: { item, sheet }, error: null };
+}
+
+/** Grava (ou limpa, com `null`) o valor real de um item da folha (§4.5). */
+export async function setSheetItemActualCents(
+  itemId: string,
+  actualCents: number | null,
+): Promise<{ error: string | null }> {
+  if (actualCents !== null && (!isCents(actualCents) || actualCents < 0)) {
+    return { error: "Confira o valor real: use algo como 1.234,56." };
+  }
+
+  const { value, error } = await findItemWithSheet(itemId);
+
+  if (error) {
+    return { error };
+  }
+
+  if (!value) {
+    return { error: "Este item não existe mais." };
+  }
+
+  if (value.sheet.status !== "open") {
+    return { error: "A folha está fechada — reabra para mudar os valores." };
+  }
+
+  // Item de fatura é espelho (D38): o valor real vive no statement — a tela da
+  // fatura mostra o mesmo número.
+  if (value.item.source === "statement" && value.item.statement_id) {
+    return setStatementActualCents(value.item.statement_id, actualCents);
+  }
+
+  const supabase = await createClient();
+
+  const { data, error: updateError } = await supabase
+    .from("sheet_items")
+    .update({ actual_cents: actualCents })
+    .eq("id", itemId)
+    .select("id");
+
+  if (updateError) {
+    return {
+      error: toUserMessage(
+        updateError,
+        "Não foi possível salvar o valor real. Tente de novo.",
+      ),
+    };
+  }
+
+  if (!data || data.length === 0) {
+    return { error: "Este item não existe mais." };
+  }
+
+  return { error: null };
+}
+
+/**
+ * Registra o pagamento do item (§4.5): o valor decide o status calculado —
+ * integral vira "pago", parcial fica registrado, e zero desfaz. No item de
+ * fatura, o pagamento **é** o da fatura (D38).
+ */
+export async function registerSheetItemPayment(
+  itemId: string,
+  paidCents: number,
+): Promise<{ error: string | null }> {
+  if (!isCents(paidCents) || paidCents < 0) {
+    return { error: "Confira o valor pago." };
+  }
+
+  const { value, error } = await findItemWithSheet(itemId);
+
+  if (error) {
+    return { error };
+  }
+
+  if (!value) {
+    return { error: "Este item não existe mais." };
+  }
+
+  if (value.sheet.status !== "open") {
+    return {
+      error: "A folha está fechada — reabra para registrar pagamentos.",
+    };
+  }
+
+  if (value.item.source === "statement" && value.item.statement_id) {
+    return registerStatementPayment(value.item.statement_id, {
+      paidCents,
+      // A conta de origem entra quando o saldo de contas existir (Fatia 8).
+      paidFromAccountId: null,
+    });
+  }
+
+  const supabase = await createClient();
+
+  const { data, error: updateError } = await supabase
+    .from("sheet_items")
+    .update({
+      paid_cents: paidCents,
+      paid_at: paidCents > 0 ? new Date().toISOString() : null,
+    })
+    .eq("id", itemId)
+    .select("id");
+
+  if (updateError) {
+    return {
+      error: toUserMessage(
+        updateError,
+        "Não foi possível registrar o pagamento. Tente de novo.",
+      ),
+    };
+  }
+
+  if (!data || data.length === 0) {
+    return { error: "Este item não existe mais." };
+  }
+
+  return { error: null };
+}
+
+/**
+ * Adiciona um item pontual (§4.4) — IPTU, multa, licenciamento. Na família,
+ * sem pagador escolhido, quem cria assume (o banco exige membro).
+ */
+export async function addOneOffItem(
+  ownership: Ownership,
+  month: string,
+  values: {
+    name: string;
+    expectedCents: number;
+    dueDate: string | null;
+    payerUserId: string | null;
+  },
+): Promise<{ error: string | null }> {
+  const name = values.name.trim();
+
+  if (name.length < 1 || name.length > 80) {
+    return { error: "Dê um nome para o item (até 80 caracteres)." };
+  }
+
+  if (!isCents(values.expectedCents) || values.expectedCents < 0) {
+    return { error: "Confira o valor: use algo como 1.234,56." };
+  }
+
+  // Abrir garante a folha do mês (e completa o que faltar — é o fluxo da tela).
+  const { sheet, error } = await openSheet(ownership, month);
+
+  if (error) {
+    return { error };
+  }
+
+  if (!sheet) {
+    return { error: "Não foi possível abrir a folha. Tente de novo." };
+  }
+
+  if (sheet.status !== "open") {
+    return { error: "A folha está fechada — reabra para adicionar itens." };
+  }
+
+  const { ownerUserId, householdId } = ownershipForScope(
+    ownership.scope,
+    ownership.userId,
+    ownership.householdId,
+  );
+
+  const supabase = await createClient();
+
+  const { error: insertError } = await supabase.from("sheet_items").insert({
+    sheet_id: sheet.id,
+    scope: ownership.scope,
+    owner_user_id: ownerUserId,
+    household_id: householdId,
+    source: "one_off",
+    template_id: null,
+    statement_id: null,
+    name,
+    expected_cents: values.expectedCents,
+    due_date: values.dueDate,
+    payer_user_id:
+      ownership.scope === "household"
+        ? (values.payerUserId ?? ownership.userId)
+        : null,
+    created_by: ownership.userId,
+  });
+
+  if (insertError) {
+    return {
+      error: toUserMessage(
+        insertError,
+        "Não foi possível adicionar o item. Tente de novo.",
+      ),
+    };
+  }
+
+  return { error: null };
+}
+
+/**
+ * Apaga um item pontual (D37): item de modelo ou de fatura não se apaga — o
+ * que a pessoa quer (sair do caminho) é editar o valor ou levar adiante.
+ */
+export async function deleteOneOffItem(
+  itemId: string,
+): Promise<{ error: string | null }> {
+  const { value, error } = await findItemWithSheet(itemId);
+
+  if (error) {
+    return { error };
+  }
+
+  // Sumiu: o resultado que a pessoa queria já está lá.
+  if (!value) {
+    return { error: null };
+  }
+
+  if (value.sheet.status !== "open") {
+    return { error: "A folha está fechada — reabra para apagar itens." };
+  }
+
+  if (value.item.source !== "one_off") {
+    return {
+      error:
+        "Itens de conta fixa ou de fatura não são apagados — edite o valor ou leve para o próximo mês.",
+    };
+  }
+
+  const supabase = await createClient();
+
+  const { error: deleteError } = await supabase
+    .from("sheet_items")
+    .delete()
+    .eq("id", itemId);
+
+  if (deleteError) {
+    return {
+      error: toUserMessage(
+        deleteError,
+        "Não foi possível apagar o item. Tente de novo.",
+      ),
+    };
+  }
+
+  return { error: null };
+}
+
+/**
+ * Leva um item para a folha do mês seguinte (§4.4).
+ *
+ * A cópia é própria — **não** mantém o vínculo com o modelo (senão a geração
+ * normal do próximo mês a confundiria com a conta daquele mês) e **mantém** o
+ * vínculo com a fatura (D38: pagar a fatura — na tela dela ou na folha —
+ * atualiza a cópia também). Modelo/pontual levam só o que **falta**: pagamento
+ * parcial não dobra valor.
+ */
+export async function carryItem(
+  ownership: Ownership,
+  itemId: string,
+): Promise<{ error: string | null }> {
+  const { value, error } = await findItemWithSheet(itemId);
+
+  if (error) {
+    return { error };
+  }
+
+  if (!value) {
+    return { error: "Este item não existe mais." };
+  }
+
+  const { item, sheet } = value;
+
+  if (sheet.status !== "open") {
+    return { error: "A folha está fechada — reabra para levar itens." };
+  }
+
+  const supabase = await createClient();
+
+  const { data: successor } = await supabase
+    .from("sheet_items")
+    .select("id")
+    .eq("carried_from_item_id", itemId)
+    .limit(1);
+
+  if ((successor ?? []).length > 0) {
+    return { error: "Este item já foi levado para o próximo mês." };
+  }
+
+  // Números vivos: no item de fatura, pago/valor real vêm do statement.
+  let effectiveCents = item.actual_cents ?? item.expected_cents;
+  let paidCents = item.paid_cents;
+
+  if (item.source === "statement" && item.statement_id) {
+    const { statements } = await listStatementsByIds([item.statement_id]);
+    const statement = statements[0];
+
+    if (statement) {
+      effectiveCents = statement.effectiveCents;
+      paidCents = statement.paidCents;
+    }
+  }
+
+  if (paidCents > 0 && paidCents >= effectiveCents) {
+    return { error: "Este item já está pago — não precisa ser levado." };
+  }
+
+  const nextMonth = shiftMonth(sheet.reference_month, 1);
+  // O escopo do item manda (item da família vai para a folha da família),
+  // mesmo que a pessoa esteja com outra visão aberta.
+  const itemOwnership: Ownership = {
+    scope: parseScope(item.scope),
+    userId: ownership.userId,
+    householdId: item.household_id ?? "",
+  };
+
+  const { sheet: nextSheet, error: nextError } = await openSheet(
+    itemOwnership,
+    nextMonth,
+  );
+
+  if (nextError || !nextSheet) {
+    return {
+      error:
+        nextError ?? "Não foi possível abrir a próxima folha. Tente de novo.",
+    };
+  }
+
+  if (nextSheet.status !== "open") {
+    return {
+      error:
+        "A folha do mês seguinte está fechada — reabra para receber o item.",
+    };
+  }
+
+  const carriesRemaining = item.source !== "statement";
+
+  const { error: insertError } = await supabase.from("sheet_items").insert({
+    sheet_id: nextSheet.id,
+    scope: parseScope(item.scope),
+    owner_user_id: item.owner_user_id,
+    household_id: item.household_id,
+    source: item.source === "statement" ? "statement" : "one_off",
+    template_id: null,
+    statement_id: item.statement_id,
+    name: item.name,
+    expected_cents: carriesRemaining
+      ? Math.max(effectiveCents - paidCents, 0)
+      : item.expected_cents,
+    actual_cents: null,
+    due_date: item.due_date,
+    payer_user_id: item.payer_user_id,
+    paid_cents: 0,
+    carried_from_item_id: item.id,
+    created_by: ownership.userId,
+  });
+
+  if (insertError) {
+    return {
+      error: toUserMessage(
+        insertError,
+        "Não foi possível levar o item. Tente de novo.",
+      ),
+    };
+  }
+
+  return { error: null };
+}
+
+/**
+ * Fecha a folha (§4.4): exige todo item **pago ou levado** — depois disso ela
+ * vira somente leitura na folha. A tela da fatura continua independente.
+ */
+export async function closeSheet(
+  ownership: Ownership,
+  month: string,
+): Promise<{ error: string | null }> {
+  const { sheet, items, error } = await listSheet(ownership, month);
+
+  if (error) {
+    return { error };
+  }
+
+  if (!sheet) {
+    return { error: "Esta folha não existe." };
+  }
+
+  if (sheet.status === "closed") {
+    return { error: "A folha já está fechada." };
+  }
+
+  const pending = items.filter(
+    (item) => item.carriedToItemId === null && !isItemPaid(item),
+  );
+
+  if (pending.length > 0) {
+    return {
+      error:
+        pending.length === 1
+          ? "Ainda há 1 item em aberto — quite ou leve para o próximo mês antes de fechar."
+          : `Ainda há ${pending.length} itens em aberto — quite ou leve para o próximo mês antes de fechar.`,
+    };
+  }
+
+  const supabase = await createClient();
+
+  const { data, error: updateError } = await supabase
+    .from("month_sheets")
+    .update({ status: "closed" })
+    .eq("id", sheet.id)
+    .select("id");
+
+  if (updateError) {
+    return {
+      error: toUserMessage(
+        updateError,
+        "Não foi possível fechar a folha. Tente de novo.",
+      ),
+    };
+  }
+
+  if (!data || data.length === 0) {
+    return { error: "Esta folha não existe mais." };
+  }
+
+  return { error: null };
+}
+
+/** Reabre a folha fechada — a tela pede confirmação em dois toques. */
+export async function reopenSheet(
+  ownership: Ownership,
+  month: string,
+): Promise<{ error: string | null }> {
+  const { row, error } = await findSheetRow(ownership, month);
+
+  if (error) {
+    return { error };
+  }
+
+  if (!row) {
+    return { error: "Esta folha não existe." };
+  }
+
+  // Já aberta: o resultado que a pessoa queria já está lá.
+  if (row.status === "open") {
+    return { error: null };
+  }
+
+  const supabase = await createClient();
+
+  const { data, error: updateError } = await supabase
+    .from("month_sheets")
+    .update({ status: "open" })
+    .eq("id", row.id)
+    .select("id");
+
+  if (updateError) {
+    return {
+      error: toUserMessage(
+        updateError,
+        "Não foi possível reabrir a folha. Tente de novo.",
+      ),
+    };
+  }
+
+  if (!data || data.length === 0) {
+    return { error: "Esta folha não existe mais." };
+  }
+
+  return { error: null };
 }
