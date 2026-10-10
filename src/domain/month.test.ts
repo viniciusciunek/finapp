@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  dateInMonth,
   dayLabel,
   isMonthKey,
   monthKeyOf,
@@ -52,6 +53,15 @@ describe("monthRange", () => {
   it("acerta o fim de fevereiro em ano bissexto e comum", () => {
     expect(monthRange("2028-02").to).toBe("2028-02-29");
     expect(monthRange("2026-02").to).toBe("2026-02-28");
+  });
+});
+
+describe("dateInMonth", () => {
+  it("monta a data e limita ao último dia do mês", () => {
+    expect(dateInMonth("2026-10", 5)).toBe("2026-10-05");
+    expect(dateInMonth("2026-02", 31)).toBe("2026-02-28");
+    expect(dateInMonth("2028-02", 30)).toBe("2028-02-29");
+    expect(dateInMonth("2026-09", 31)).toBe("2026-09-30");
   });
 });
 

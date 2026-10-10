@@ -55,6 +55,24 @@ export function monthRange(monthKey: string): { from: string; to: string } {
   };
 }
 
+/**
+ * O dia pedido, ou o último do mês quando o mês é mais curto que ele
+ * (`"2026-02"`, 31 → 28). Usado pelo fechamento do cartão e pelo vencimento
+ * dos itens da folha — a mesma regra, num lugar só.
+ */
+export function effectiveDayInMonth(monthKey: string, day: number): number {
+  const lastDay = Number(monthRange(monthKey).to.slice(8, 10));
+
+  return Math.min(day, lastDay);
+}
+
+/** Dia `day` dentro do mês, em `YYYY-MM-DD`, limitado ao último dia do mês. */
+export function dateInMonth(monthKey: string, day: number): string {
+  const effectiveDay = effectiveDayInMonth(monthKey, day);
+
+  return `${monthKey}-${String(effectiveDay).padStart(2, "0")}`;
+}
+
 /** Rótulo em pt-BR: `"2026-10"` → `"outubro de 2026"`. */
 export function monthLabel(monthKey: string): string {
   const [year, month] = monthKey.split("-").map(Number);

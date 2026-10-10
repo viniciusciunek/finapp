@@ -1,4 +1,4 @@
-import { monthRange, shiftMonth } from "./month";
+import { dateInMonth, effectiveDayInMonth, shiftMonth } from "./month";
 
 /**
  * Fatura do cartão: em que mês uma compra entra.
@@ -45,23 +45,6 @@ export function statementDates(
     closingDate: dateInMonth(referenceMonth, closingDay),
     dueDate: dateInMonth(shiftMonth(referenceMonth, 1), dueDay),
   };
-}
-
-/**
- * Dia `day` dentro do mês, em `YYYY-MM-DD`, limitado ao último dia do mês —
- * o mesmo tratamento que o dia do fechamento recebe em `resolveStatementMonth`.
- */
-function dateInMonth(monthKey: string, day: number): string {
-  const effectiveDay = effectiveDayInMonth(monthKey, day);
-
-  return `${monthKey}-${String(effectiveDay).padStart(2, "0")}`;
-}
-
-/** O dia pedido, ou o último do mês quando o mês é mais curto que ele. */
-function effectiveDayInMonth(monthKey: string, day: number): number {
-  const lastDay = Number(monthRange(monthKey).to.slice(8, 10));
-
-  return Math.min(day, lastDay);
 }
 
 /**
