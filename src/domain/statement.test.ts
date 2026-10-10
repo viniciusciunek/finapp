@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveStatementMonth, statementDates } from "./statement";
+import {
+  isStatementOpen,
+  resolveStatementMonth,
+  statementDates,
+} from "./statement";
 
 describe("resolveStatementMonth", () => {
   it("compra antes do fechamento entra na fatura do próprio mês", () => {
@@ -80,5 +84,14 @@ describe("statementDates", () => {
       closingDate: "2026-12-20",
       dueDate: "2027-01-05",
     });
+  });
+});
+
+describe("isStatementOpen", () => {
+  it("aberta até o dia do fechamento (inclusive); fechada no seguinte", () => {
+    expect(isStatementOpen("2026-10-20", "2026-10-09")).toBe(true);
+    expect(isStatementOpen("2026-10-20", "2026-10-20")).toBe(true);
+    expect(isStatementOpen("2026-10-20", "2026-10-21")).toBe(false);
+    expect(isStatementOpen("2026-11-20", "2026-12-05")).toBe(false);
   });
 });

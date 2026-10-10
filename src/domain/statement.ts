@@ -63,3 +63,14 @@ function effectiveDayInMonth(monthKey: string, day: number): number {
 
   return Math.min(day, lastDay);
 }
+
+/**
+ * A fatura ainda está aberta? — o dia do fechamento é inclusive (§4.1).
+ *
+ * O `statements.status` guardado acompanha o **pagamento** (paid/partial,
+ * §4.3); o fechamento por data é derivado na leitura — uma fatura do mês
+ * passado não pode aparecer como "aberta" só porque ainda não foi paga.
+ */
+export function isStatementOpen(closingDate: string, today: string): boolean {
+  return today <= closingDate;
+}

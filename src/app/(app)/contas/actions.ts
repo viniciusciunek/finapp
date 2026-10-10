@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
@@ -15,6 +16,10 @@ import {
 } from "@/server/credit-cards";
 import { getScope } from "@/server/scope";
 import { requireHousehold } from "@/server/session";
+import {
+  registerStatementPayment,
+  setStatementActualCents,
+} from "@/server/statements";
 
 /**
  * Estado devolvido pelas Server Actions de conta e de cartão: quando dá certo o
@@ -304,4 +309,114 @@ export async function deleteCreditCardAction(
   }
 
   redirect("/contas");
+}
+
+/**
+ * Grava o valor real da fatura (§4.3).
+ *
+ * Campo vazio limpa o real e a fatura volta a valer o calculado — `null` é
+ * "não informado", diferente de zero.
+ */
+export async function setActualValueAction(
+  _previousState: AccountFormState,
+  formData: FormData,
+): Promise<AccountFormState> {
+  const parsed = z
+    .object({
+      statementId: entityId,
+      cardId: entityId,
+      amount: z.string().trim(),
+    })
+    .safeParse({
+      statementId: formData.get("statementId"),
+      cardId: formData.get("cardId"),
+      amount: formData.get("amount"),
+    });
+
+  if (!parsed.success) {
+    return {
+      error:
+        parsed.error.issues[0]?.message ?? "Verifique os dados informados.",
+    };
+  }
+
+  let actualCents: number | null = null;
+
+  if (parsed.data.amount !== "") {
+    actualCents = parseCentsFromText(parsed.data.amount);
+
+    if (actualCents === null || actualCents < 0) {
+      return { error: "Confira o valor real: use algo como 1.234,56." };
+    }
+  }
+
+  // Sessão depois da validação (ver `createAccountAction`).
+  await requireHousehold();
+
+  const { error } = await setStatementActualCents(
+    parsed.data.statementId,
+    actualCents,
+  );
+
+  if (error) {
+    return { error };
+  }
+
+  // A fatura mudou: a tela dela e a linha em /contas renderizam de novo.
+  revalidatePath(`/contas/cartoes/${parsed.data.cardId}/fatura`);
+  revalidatePath("/contas");
+
+  return { error: null };
+}
+
+/**
+ * Registra o pagamento da fatura (§4.3): o valor decide o status — o total
+ * (ou mais) vira `paid`, a menos vira `partial`, e zero desfaz.
+ */
+export async function registerPaymentAction(
+  _previousState: AccountFormState,
+  formData: FormData,
+): Promise<AccountFormState> {
+  const parsed = z
+    .object({
+      statementId: entityId,
+      cardId: entityId,
+      amount: z.string().trim(),
+    })
+    .safeParse({
+      statementId: formData.get("statementId"),
+      cardId: formData.get("cardId"),
+      amount: formData.get("amount"),
+    });
+
+  if (!parsed.success) {
+    return {
+      error:
+        parsed.error.issues[0]?.message ?? "Verifique os dados informados.",
+    };
+  }
+
+  const paidCents = parseCentsFromText(parsed.data.amount);
+
+  if (paidCents === null || paidCents < 0) {
+    return { error: "Confira o valor pago: use algo como 1.234,56." };
+  }
+
+  // Sessão depois da validação (ver `createAccountAction`).
+  await requireHousehold();
+
+  const { error } = await registerStatementPayment(parsed.data.statementId, {
+    paidCents,
+    // A conta de origem entra quando o saldo de contas existir (Fatia 8).
+    paidFromAccountId: null,
+  });
+
+  if (error) {
+    return { error };
+  }
+
+  revalidatePath(`/contas/cartoes/${parsed.data.cardId}/fatura`);
+  revalidatePath("/contas");
+
+  return { error: null };
 }

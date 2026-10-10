@@ -190,7 +190,7 @@ async function AccountsContent() {
         {cardsResult.cards.length > 0 ? (
           <ul className="divide-y overflow-hidden rounded-xl border">
             {cardsResult.cards.map((card) => (
-              <li key={card.id}>
+              <li key={card.id} className="divide-y">
                 <Link
                   href={`/contas/cartoes/${card.id}/editar`}
                   className="hover:bg-muted/50 block p-3"
@@ -202,6 +202,11 @@ async function AccountsContent() {
                       ? ""
                       : ` · limite ${formatBrl(card.limitCents)}`}
                   </p>
+                </Link>
+                <Link
+                  href={`/contas/cartoes/${card.id}/fatura`}
+                  className="hover:bg-muted/50 block p-3"
+                >
                   <p className="text-sm font-medium">
                     Fatura aberta —{" "}
                     {monthLabel(
@@ -209,6 +214,7 @@ async function AccountsContent() {
                     )}
                     : {formatBrl(statementByCard.get(card.id)?.totalCents ?? 0)}
                   </p>
+                  <p className="text-muted-foreground text-xs">Ver fatura →</p>
                 </Link>
               </li>
             ))}

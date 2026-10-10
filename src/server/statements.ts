@@ -32,6 +32,8 @@ export type StatementSummary = {
   calculatedCents: number;
   /** O que vale para pagar: real, se informado; senão, o calculado. */
   effectiveCents: number;
+  /** §4.3: real − calculado; `null` enquanto o real não foi informado. */
+  unloggedCents: number | null;
 };
 
 const STATEMENT_COLUMNS =
@@ -68,6 +70,8 @@ function toSummary(
     calculatedCents,
     // §4.3: o efetivo é o real quando existe; sem real, o calculado.
     effectiveCents: row.actual_cents ?? calculatedCents,
+    unloggedCents:
+      row.actual_cents === null ? null : row.actual_cents - calculatedCents,
   };
 }
 
@@ -248,6 +252,92 @@ export async function listStatementsForMonths(
     statements: rows.map((row) => toSummary(row, sums.get(row.id) ?? 0)),
     error: null,
   };
+}
+
+/** Um lançamento (parcela) que compõe o calculado de uma fatura (§4.3). */
+export type StatementItem = {
+  installmentNumber: number;
+  installmentsCount: number;
+  amountCents: number;
+  transactionId: string;
+  description: string;
+  occurredOn: string;
+};
+
+/**
+ * A fatura de um cartão num mês, com os lançamentos que a compõem.
+ *
+ * Sem fatura no mês, devolve `statement: null` — a tela mostra "sem fatura",
+ * que é diferente de fatura zerada.
+ */
+export async function getStatementDetail(
+  cardId: string,
+  referenceMonth: string,
+): Promise<{
+  statement: StatementSummary | null;
+  items: StatementItem[];
+  error: string | null;
+}> {
+  const supabase = await createClient();
+
+  const { data: row, error } = await supabase
+    .from("statements")
+    .select(STATEMENT_COLUMNS)
+    .eq("card_id", cardId)
+    .eq("reference_month", referenceMonth)
+    .maybeSingle();
+
+  if (error) {
+    return {
+      statement: null,
+      items: [],
+      error: toUserMessage(error, "Não foi possível carregar a fatura."),
+    };
+  }
+
+  if (!row) {
+    return { statement: null, items: [], error: null };
+  }
+
+  const { data: installments, error: itemsError } = await supabase
+    .from("card_installments")
+    .select(
+      "number, amount_cents, transaction_id, transactions(description, occurred_on, installments_count)",
+    )
+    .eq("statement_id", row.id)
+    .order("number", { ascending: true });
+
+  if (itemsError) {
+    return {
+      statement: null,
+      items: [],
+      error: toUserMessage(itemsError, "Não foi possível carregar a fatura."),
+    };
+  }
+
+  const items: StatementItem[] = [];
+  let calculatedCents = 0;
+
+  for (const installment of installments ?? []) {
+    calculatedCents += installment.amount_cents;
+
+    const transaction = installment.transactions;
+
+    if (!transaction) {
+      continue;
+    }
+
+    items.push({
+      installmentNumber: installment.number,
+      installmentsCount: transaction.installments_count,
+      amountCents: installment.amount_cents,
+      transactionId: installment.transaction_id,
+      description: transaction.description,
+      occurredOn: transaction.occurred_on,
+    });
+  }
+
+  return { statement: toSummary(row, calculatedCents), items, error: null };
 }
 
 /** Grava (ou limpa, com `null`) o valor real da fatura — §4.3. */
