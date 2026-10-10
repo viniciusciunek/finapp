@@ -60,6 +60,17 @@ export function sheetItemStatus(
 }
 
 /**
+ * Item que ainda trava o fechamento (§4.4): não está pago e não foi levado
+ * adiante. O "mês quitado" da tela e o `closeSheet` compartilham esta regra —
+ * item levado não falta (o que restou dele já está no mês seguinte).
+ */
+export function isItemPending(
+  item: SheetItemAmounts & { carriedToItemId: string | null },
+): boolean {
+  return item.carriedToItemId === null && !isItemPaid(item);
+}
+
+/**
  * Valor previsto do item de um modelo (§4.4): o valor **real** do mesmo modelo
  * no mês anterior; sem ele, o previsto daquele mês; sem mês anterior, o padrão
  * do modelo. É a "sugestão pelo mês anterior" do caderno.

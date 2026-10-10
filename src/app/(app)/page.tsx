@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   isMonthKey,
+  longDayLabel,
   monthKeyOf,
   monthLabel,
   monthRange,
@@ -18,6 +19,7 @@ import { formatBrl } from "@/lib/format";
 import { listCategories } from "@/server/categories";
 import { getScope } from "@/server/scope";
 import { requireHousehold } from "@/server/session";
+import { findSheet } from "@/server/sheets";
 import {
   listTransactionsBetween,
   type Transaction,
@@ -87,9 +89,11 @@ async function OverviewContent({
   const scope = await getScope();
 
   const { mes } = await searchParams;
+  const now = new Date();
+  const currentMonth = monthKeyOf(now);
   // Mês válido na URL; qualquer outra coisa vira o mês de hoje. Endereço torto
   // não pode virar tela de erro.
-  const monthKey = isMonthKey(mes) ? mes : monthKeyOf(new Date());
+  const monthKey = isMonthKey(mes) ? mes : currentMonth;
   const { from, to } = monthRange(monthKey);
 
   const ownership = {
@@ -108,11 +112,29 @@ async function OverviewContent({
     categoriesResult.categories.map((category) => [category.id, category.name]),
   );
 
-  // O total sai da mesma lista que está na tela — se a soma e o que se vê
+  // Total do mês sai da mesma lista que está na tela — se a soma e o que se vê
   // divergissem, a pessoa perderia a confiança nos dois.
   const totalCents = sumCents(
     transactionsResult.transactions.map((item) => item.totalCents),
   );
+
+  // Aviso do fechamento (Fatia 5): quando o mês exibido é o de hoje e a folha
+  // do mês anterior continua aberta depois da data prevista, a tela inicial
+  // lembra. `findSheet` não cria nada e erro aqui não derruba a lista — no
+  // pior caso, o aviso simplesmente não aparece.
+  const closableMonth = shiftMonth(currentMonth, -1);
+  const today = `${currentMonth}-${String(now.getDate()).padStart(2, "0")}`;
+  const noticeResult =
+    monthKey === currentMonth
+      ? await findSheet(ownership, closableMonth)
+      : { sheet: null };
+
+  const closingNotice =
+    noticeResult.sheet &&
+    noticeResult.sheet.status === "open" &&
+    today >= noticeResult.sheet.plannedCloseDate
+      ? noticeResult.sheet
+      : null;
 
   // Agrupa por dia. O banco já devolve na ordem certa (dia mais recente
   // primeiro, e dentro do dia o lançamento mais novo primeiro).
@@ -137,6 +159,24 @@ async function OverviewContent({
             : "O que é só seu — invisível para qualquer outra pessoa, inclusive para a família."}
         </p>
       </div>
+
+      {closingNotice ? (
+        <Link
+          href={`/folha?mes=${closableMonth}`}
+          className="hover:bg-muted/50 block rounded-xl border p-4"
+        >
+          <p className="text-sm font-medium">
+            Fechar {monthLabel(closableMonth)}
+          </p>
+          <p className="text-muted-foreground mt-1 text-xs">
+            O fechamento estava previsto para{" "}
+            {longDayLabel(closingNotice.plannedCloseDate)}.
+          </p>
+          <p className="mt-1 text-sm font-medium underline underline-offset-2">
+            Abrir a folha
+          </p>
+        </Link>
+      ) : null}
 
       <Button asChild className="w-full" size="lg">
         <Link href="/lancar">Lançar despesa</Link>

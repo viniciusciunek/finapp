@@ -4,6 +4,7 @@ import {
   dateInMonth,
   dayLabel,
   isMonthKey,
+  longDayLabel,
   monthKeyOf,
   monthLabel,
   monthRange,
@@ -78,6 +79,16 @@ describe("dayLabel", () => {
     // esquerda no dia, então a asserção é sobre o conteúdo, não sobre o formato.
     expect(dayLabel("2026-10-05")).toMatch(/^seg/i);
     expect(dayLabel("2026-10-05")).toMatch(/\b5\b/);
+  });
+});
+
+describe("longDayLabel", () => {
+  it("escreve o dia por extenso, com o mês e sem o ano", () => {
+    const label = longDayLabel("2026-11-05");
+
+    expect(label).toMatch(/\b5\b/);
+    expect(label).toMatch(/novembro/i);
+    expect(label).not.toMatch(/2026/);
   });
 });
 

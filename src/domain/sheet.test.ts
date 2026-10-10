@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   isItemPaid,
+  isItemPending,
   nthBusinessDay,
   personalSheetItemsForUser,
   plannedCloseDate,
@@ -108,6 +109,31 @@ describe("sheetItemStatus", () => {
   it("item zerado não nasce pago", () => {
     expect(
       isItemPaid({ expectedCents: 0, actualCents: null, paidCents: 0 }),
+    ).toBe(false);
+  });
+});
+
+describe("isItemPending (trava do fechamento — §4.4)", () => {
+  const base = {
+    expectedCents: 10000,
+    actualCents: null,
+    paidCents: 0,
+    carriedToItemId: null as string | null,
+  };
+
+  it("sem pagamento e sem levar, falta", () => {
+    expect(isItemPending(base)).toBe(true);
+    expect(isItemPending({ ...base, paidCents: 4000 })).toBe(true);
+  });
+
+  it("pago não falta", () => {
+    expect(isItemPending({ ...base, paidCents: 10000 })).toBe(false);
+  });
+
+  it("levado não falta — nem pago em parte", () => {
+    expect(isItemPending({ ...base, carriedToItemId: "copia" })).toBe(false);
+    expect(
+      isItemPending({ ...base, paidCents: 4000, carriedToItemId: "copia" }),
     ).toBe(false);
   });
 });

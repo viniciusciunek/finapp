@@ -94,3 +94,17 @@ export function dayLabel(isoDate: string): string {
     timeZone: "UTC",
   }).format(new Date(Date.UTC(year, month - 1, day)));
 }
+
+/**
+ * Dia por extenso, sem o ano: `"2026-11-05"` → `"5 de novembro"`. Para datas
+ * em que o mês importa e o ano seria ruído (o fechamento da folha).
+ */
+export function longDayLabel(isoDate: string): string {
+  const [year, month, day] = isoDate.split("-").map(Number);
+
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "numeric",
+    month: "long",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+}

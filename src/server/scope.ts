@@ -29,6 +29,30 @@ export const SCOPE_COOKIE_OPTIONS = {
 } as const;
 
 /**
+ * Cookie do switch "incluir contas da família" da folha pessoal (§4.6).
+ *
+ * É a segunda preferência de **visão** do app — separada da primeira (o
+ * escopo) porque vale só para a Folha. `"1"` é ligado; qualquer outra coisa,
+ * desligado.
+ */
+export const INCLUDE_FAMILY_COOKIE = "finapp_folha_familia";
+
+/** Mesmas opções do cookie de escopo: é a mesma natureza de preferência. */
+export const INCLUDE_FAMILY_COOKIE_OPTIONS = SCOPE_COOKIE_OPTIONS;
+
+/**
+ * O switch está ligado nesta requisição? (padrão: desligado)
+ *
+ * Embrulhado em `cache()` pelo mesmo motivo do `getScope`: layout e páginas
+ * leem uma vez por requisição.
+ */
+export const getIncludeFamilyItems = cache(async (): Promise<boolean> => {
+  const cookieStore = await cookies();
+
+  return cookieStore.get(INCLUDE_FAMILY_COOKIE)?.value === "1";
+});
+
+/**
  * Escopo ativo da requisição.
  *
  * Fica em cookie (e não na URL) para o usuário não perder a escolha ao navegar.

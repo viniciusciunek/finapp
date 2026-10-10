@@ -7,7 +7,7 @@ import {
   type Scope,
 } from "@/domain/scope";
 import {
-  isItemPaid,
+  isItemPending,
   plannedCloseDate,
   suggestedExpectedCents,
 } from "@/domain/sheet";
@@ -77,9 +77,15 @@ export type SheetItemView = {
   carriedFromItemId: string | null;
   /** Preenchido quando ESTE item foi levado adiante (a cópia aponta para cá). */
   carriedToItemId: string | null;
-  /** Presente nos itens de fatura: os números vivos dela, para a tela. */
+  /**
+   * Presente nos itens de fatura: os números vivos dela, para a tela. O
+   * `cardId` e o `referenceMonth` levam à fatura certa ("Ver fatura") —
+   * inclusive a antiga, quando o item foi levado de um mês para o outro.
+   */
   statement: {
     id: string;
+    cardId: string;
+    referenceMonth: string;
     cardName: string | null;
     calculatedCents: number;
     effectiveCents: number;
@@ -602,6 +608,8 @@ export async function listSheet(
       statement: statement
         ? {
             id: statement.id,
+            cardId: statement.cardId,
+            referenceMonth: statement.referenceMonth,
             cardName: cardNameById.get(statement.cardId) ?? null,
             calculatedCents: statement.calculatedCents,
             effectiveCents: statement.effectiveCents,
@@ -612,6 +620,25 @@ export async function listSheet(
   });
 
   return { sheet: toMonthSheet(sheetRow), items, error: null };
+}
+
+/**
+ * A folha do escopo num mês, **sem os itens** — o aviso de fechamento da tela
+ * inicial só precisa da linha (status e data prevista); carregar a folha
+ * inteira para isso seria desperdício. Diferente do `openSheet`, não cria
+ * nada.
+ */
+export async function findSheet(
+  ownership: Ownership,
+  month: string,
+): Promise<{ sheet: MonthSheet | null; error: string | null }> {
+  const { row, error } = await findSheetRow(ownership, month);
+
+  if (error) {
+    return { sheet: null, error };
+  }
+
+  return { sheet: row ? toMonthSheet(row) : null, error: null };
 }
 
 /** Os modelos recorrentes do escopo ativo (a tela de fixas usa na fase 7). */
@@ -1105,9 +1132,7 @@ export async function closeSheet(
     return { error: "A folha já está fechada." };
   }
 
-  const pending = items.filter(
-    (item) => item.carriedToItemId === null && !isItemPaid(item),
-  );
+  const pending = items.filter(isItemPending);
 
   if (pending.length > 0) {
     return {
