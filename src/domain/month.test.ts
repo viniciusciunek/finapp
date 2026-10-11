@@ -7,6 +7,7 @@ import {
   longDayLabel,
   monthKeyOf,
   monthLabel,
+  monthName,
   monthRange,
   shiftMonth,
 } from "./month";
@@ -89,6 +90,14 @@ describe("longDayLabel", () => {
     expect(label).toMatch(/\b5\b/);
     expect(label).toMatch(/novembro/i);
     expect(label).not.toMatch(/2026/);
+  });
+});
+
+describe("monthName", () => {
+  it("dá o nome do mês pelo número", () => {
+    expect(monthName(1)).toBe("janeiro");
+    expect(monthName(3)).toBe("março");
+    expect(monthName(12)).toBe("dezembro");
   });
 });
 

@@ -108,3 +108,14 @@ export function longDayLabel(isoDate: string): string {
     timeZone: "UTC",
   }).format(new Date(Date.UTC(year, month - 1, day)));
 }
+
+/**
+ * Nome do mês pelo número: `1` → `"janeiro"`. Para escolhas como o mês da
+ * conta anual — aqui o ano não importa.
+ */
+export function monthName(month: number): string {
+  return new Intl.DateTimeFormat("pt-BR", {
+    month: "long",
+    timeZone: "UTC",
+  }).format(new Date(Date.UTC(2026, month - 1, 1)));
+}

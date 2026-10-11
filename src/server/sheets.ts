@@ -670,6 +670,197 @@ export async function listRecurringTemplates(
   return { templates: (data ?? []).map(toTemplate), error: null };
 }
 
+/** O que a tela de contas fixas escreve — criação e edição usam o mesmo molde. */
+export type RecurringTemplateValues = {
+  name: string;
+  categoryId: string | null;
+  defaultAmountCents: number;
+  dueDay: number;
+  payerUserId: string | null;
+  frequency: "monthly" | "yearly";
+  yearlyMonth: number | null;
+};
+
+/**
+ * As colunas que a tela escreve. O pagador só existe na família (CHECK no
+ * banco); o mês anual só existe no anual (CHECK também).
+ */
+function templateColumnsFor(
+  ownership: Ownership,
+  values: RecurringTemplateValues,
+) {
+  return {
+    name: values.name,
+    category_id: values.categoryId,
+    default_amount_cents: values.defaultAmountCents,
+    due_day: values.dueDay,
+    payer_user_id: ownership.scope === "household" ? values.payerUserId : null,
+    frequency: values.frequency,
+    yearly_month: values.frequency === "yearly" ? values.yearlyMonth : null,
+  };
+}
+
+/**
+ * Nome repetido no mesmo escopo devolve 23505, mas a mensagem crua do Postgres
+ * é em inglês — a tela merece a frase do app.
+ */
+const DUPLICATE_TEMPLATE_NAME = "Já existe uma conta fixa com esse nome.";
+
+/** A conta fixa do escopo ativo — a tela de editar usa; fora do escopo, null. */
+export async function findRecurringTemplate(
+  ownership: Ownership,
+  templateId: string,
+): Promise<{ template: RecurringTemplate | null; error: string | null }> {
+  const supabase = await createClient();
+
+  const filtered =
+    ownership.scope === "personal"
+      ? supabase
+          .from("recurring_templates")
+          .select(TEMPLATE_COLUMNS)
+          .eq("owner_user_id", ownership.userId)
+      : supabase
+          .from("recurring_templates")
+          .select(TEMPLATE_COLUMNS)
+          .eq("household_id", ownership.householdId);
+
+  const { data, error } = await filtered.eq("id", templateId).maybeSingle();
+
+  if (error) {
+    return {
+      template: null,
+      error: toUserMessage(error, "Não foi possível carregar a conta fixa."),
+    };
+  }
+
+  return { template: data ? toTemplate(data) : null, error: null };
+}
+
+/** Cria uma conta fixa (modelo recorrente — §4.4). */
+export async function createRecurringTemplate(
+  ownership: Ownership,
+  values: RecurringTemplateValues,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+  const { ownerUserId, householdId } = ownershipForScope(
+    ownership.scope,
+    ownership.userId,
+    ownership.householdId,
+  );
+
+  const { data, error } = await supabase
+    .from("recurring_templates")
+    .insert({
+      scope: ownership.scope,
+      owner_user_id: ownerUserId,
+      household_id: householdId,
+      ...templateColumnsFor(ownership, values),
+      created_by: ownership.userId,
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) {
+    if (error?.code === "23505") {
+      return { error: DUPLICATE_TEMPLATE_NAME };
+    }
+
+    return {
+      error: toUserMessage(
+        error,
+        "Não foi possível criar a conta fixa. Tente de novo.",
+      ),
+    };
+  }
+
+  return { error: null };
+}
+
+/**
+ * Salva a conta fixa. As mudanças valem para as **próximas** folhas — cada mês
+ * já gerado guarda o retrato dele (D40); por isso a atualização não toca em
+ * `sheet_items`.
+ */
+export async function updateRecurringTemplate(
+  ownership: Ownership,
+  templateId: string,
+  values: RecurringTemplateValues,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+
+  const filtered =
+    ownership.scope === "personal"
+      ? supabase
+          .from("recurring_templates")
+          .update(templateColumnsFor(ownership, values))
+          .eq("owner_user_id", ownership.userId)
+      : supabase
+          .from("recurring_templates")
+          .update(templateColumnsFor(ownership, values))
+          .eq("household_id", ownership.householdId);
+
+  const { data, error } = await filtered.eq("id", templateId).select("id");
+
+  if (error) {
+    if (error.code === "23505") {
+      return { error: DUPLICATE_TEMPLATE_NAME };
+    }
+
+    return {
+      error: toUserMessage(
+        error,
+        "Não foi possível salvar a conta fixa. Tente de novo.",
+      ),
+    };
+  }
+
+  if (!data || data.length === 0) {
+    return { error: "Esta conta fixa não existe mais." };
+  }
+
+  return { error: null };
+}
+
+/**
+ * Desativa (ou reativa) a conta fixa — o uso normal não apaga: a folha de cada
+ * mês guarda o retrato, e desativar só impede a geração nos meses seguintes.
+ */
+export async function setRecurringTemplateActive(
+  ownership: Ownership,
+  templateId: string,
+  active: boolean,
+): Promise<{ error: string | null }> {
+  const supabase = await createClient();
+
+  const filtered =
+    ownership.scope === "personal"
+      ? supabase
+          .from("recurring_templates")
+          .update({ active })
+          .eq("owner_user_id", ownership.userId)
+      : supabase
+          .from("recurring_templates")
+          .update({ active })
+          .eq("household_id", ownership.householdId);
+
+  const { data, error } = await filtered.eq("id", templateId).select("id");
+
+  if (error) {
+    return {
+      error: toUserMessage(
+        error,
+        "Não foi possível salvar a conta fixa. Tente de novo.",
+      ),
+    };
+  }
+
+  if (!data || data.length === 0) {
+    return { error: "Esta conta fixa não existe mais." };
+  }
+
+  return { error: null };
+}
+
 // ---------------------------------------------------------------------------
 // Mutações (fase 4/8)
 //
@@ -984,6 +1175,59 @@ export async function deleteOneOffItem(
         "Não foi possível apagar o item. Tente de novo.",
       ),
     };
+  }
+
+  return { error: null };
+}
+
+/**
+ * Troca o pagador de um item de família (§4.6) — vale só para o mês atual; o
+ * modelo (ou a fatura) continua com o pagador dele. O banco exige que o
+ * escolhido seja membro (trigger, mensagem 22023 já em pt-BR).
+ */
+export async function setSheetItemPayer(
+  itemId: string,
+  payerUserId: string,
+): Promise<{ error: string | null }> {
+  const { value, error } = await findItemWithSheet(itemId);
+
+  if (error) {
+    return { error };
+  }
+
+  if (!value) {
+    return { error: "Este item não existe mais." };
+  }
+
+  if (value.item.scope !== "household") {
+    return { error: "Item pessoal não tem pagador — quem paga é você." };
+  }
+
+  if (value.sheet.status !== "open") {
+    return {
+      error: "A folha está fechada — reabra para trocar o pagador.",
+    };
+  }
+
+  const supabase = await createClient();
+
+  const { data, error: updateError } = await supabase
+    .from("sheet_items")
+    .update({ payer_user_id: payerUserId })
+    .eq("id", itemId)
+    .select("id");
+
+  if (updateError) {
+    return {
+      error: toUserMessage(
+        updateError,
+        "Não foi possível trocar o pagador. Tente de novo.",
+      ),
+    };
+  }
+
+  if (!data || data.length === 0) {
+    return { error: "Este item não existe mais." };
   }
 
   return { error: null };

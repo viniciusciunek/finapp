@@ -86,6 +86,9 @@ export function suggestedExpectedCents(
   );
 }
 
+/** Mesmo limite do CHECK `length(btrim(name)) between 1 and 60` do modelo. */
+export const TEMPLATE_NAME_MAX = 60;
+
 /**
  * O `n`-ésimo dia útil a partir do dia 1 do mês (sábado e domingo não contam;
  * feriados são ajuste manual no MVP, como o ROADMAP prevê). Se o mês tiver

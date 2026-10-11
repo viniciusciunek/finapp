@@ -21,6 +21,7 @@ import {
   registerSheetItemPayment,
   reopenSheet,
   setSheetItemActualCents,
+  setSheetItemPayer,
 } from "@/server/sheets";
 
 /**
@@ -244,6 +245,47 @@ export async function deleteOneOffItemAction(
   await requireHousehold();
 
   const { error } = await deleteOneOffItem(parsed.data.itemId);
+
+  if (error) {
+    return { error };
+  }
+
+  revalidateSheetScreens();
+
+  return { error: null };
+}
+
+/**
+ * Troca o pagador de um item da família (§4.6) — vale só para o mês atual. O
+ * seletor da tela lista os membros; o banco exige membro de verdade (trigger).
+ */
+export async function setItemPayerAction(
+  _previousState: SheetActionState,
+  formData: FormData,
+): Promise<SheetActionState> {
+  const parsed = z
+    .object({
+      itemId,
+      payerUserId: z.string().refine(isUuid, "Escolha quem paga."),
+    })
+    .safeParse({
+      itemId: formData.get("itemId"),
+      payerUserId: formData.get("payerUserId"),
+    });
+
+  if (!parsed.success) {
+    return {
+      error:
+        parsed.error.issues[0]?.message ?? "Verifique os dados informados.",
+    };
+  }
+
+  await requireHousehold();
+
+  const { error } = await setSheetItemPayer(
+    parsed.data.itemId,
+    parsed.data.payerUserId,
+  );
 
   if (error) {
     return { error };

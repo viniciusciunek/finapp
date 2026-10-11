@@ -180,6 +180,7 @@ function ItemRow({
   today,
   familyItemIds,
   memberNames,
+  members,
   canEdit,
 }: {
   item: SheetItemView;
@@ -189,6 +190,8 @@ function ItemRow({
   familyItemIds: Set<string>;
   /** Nome do pagador, na visão da família (§4.6). */
   memberNames: Map<string, string>;
+  /** Membros da família para o seletor de pagador (vazio no pessoal). */
+  members: { userId: string; name: string }[];
   /** Folha aberta: a linha ganha as ações (§4.4 — fechada é só leitura). */
   canEdit: boolean;
 }) {
@@ -260,7 +263,7 @@ function ItemRow({
         <Meta parts={parts} />
         <StatusChip chip={chip} />
       </div>
-      {canEdit ? <ItemActions item={item} /> : null}
+      {canEdit ? <ItemActions item={item} members={members} /> : null}
     </li>
   );
 }
@@ -359,6 +362,13 @@ async function SheetContent({
     ]),
   );
 
+  // Para o seletor de pagador no item (visão da família) — o `ItemActions` é
+  // cliente, então recebe lista, não Map.
+  const memberOptions = (membersResult?.members ?? []).map((member) => ({
+    userId: member.userId,
+    name: member.name,
+  }));
+
   // Totais (§4.6). "Falta" ignora o que já foi levado: o que restou desses
   // itens está na folha do mês seguinte — não pode faltar duas vezes.
   const totals = sheetTotals(items);
@@ -372,12 +382,17 @@ async function SheetContent({
 
   return (
     <div className="space-y-4">
-      <div className="space-y-1">
-        <h2 className="text-lg font-semibold">Folha do mês</h2>
-        <p className="text-muted-foreground text-sm">
-          {sheet.status === "closed" ? "Fechada" : "Aberta"} · fechamento
-          previsto para {longDayLabel(sheet.plannedCloseDate)}
-        </p>
+      <div className="flex items-start justify-between gap-2">
+        <div className="space-y-1">
+          <h2 className="text-lg font-semibold">Folha do mês</h2>
+          <p className="text-muted-foreground text-sm">
+            {sheet.status === "closed" ? "Fechada" : "Aberta"} · fechamento
+            previsto para {longDayLabel(sheet.plannedCloseDate)}
+          </p>
+        </div>
+        <Button asChild variant="ghost" size="sm">
+          <Link href="/folha/fixas">Contas fixas</Link>
+        </Button>
       </div>
 
       <MonthNav month={month} />
@@ -462,6 +477,9 @@ async function SheetContent({
             As contas fixas e as faturas do mês viram itens sozinhas; pontuais
             entram na mão.
           </p>
+          <Button asChild variant="outline" size="sm" className="mt-3">
+            <Link href="/folha/fixas">Cadastrar contas fixas</Link>
+          </Button>
         </div>
       ) : (
         GROUPS.map((group) => {
@@ -487,6 +505,7 @@ async function SheetContent({
                     today={today}
                     familyItemIds={familyItemIds}
                     memberNames={memberNames}
+                    members={memberOptions}
                     canEdit={sheet.status === "open"}
                   />
                 ))}

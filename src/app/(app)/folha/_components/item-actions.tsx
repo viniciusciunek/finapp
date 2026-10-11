@@ -15,11 +15,19 @@ import {
   deleteOneOffItemAction,
   registerItemPaymentAction,
   setItemActualValueAction,
+  setItemPayerAction,
   type SheetActionState,
 } from "../actions";
 import { TwoTapSubmit } from "./two-tap-submit";
 
 const initialState: SheetActionState = { error: null };
+
+/**
+ * Aparência do `<select>` nativo, igual à de `account-form.tsx` — o seletor
+ * de pagador usa o controle do sistema, que é melhor no celular.
+ */
+const SELECT_CLASSES =
+  "border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 disabled:bg-input/50 h-8 w-full min-w-0 appearance-none rounded-lg border bg-transparent px-2.5 py-1 text-base transition-colors outline-none focus-visible:ring-3 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm";
 
 /**
  * As ações de um item da folha (fase 6).
@@ -32,7 +40,14 @@ const initialState: SheetActionState = { error: null };
  * Só aparece com a folha aberta (quem decide é a página) — folha fechada é
  * somente leitura por aqui.
  */
-export function ItemActions({ item }: { item: SheetItemView }) {
+export function ItemActions({
+  item,
+  members,
+}: {
+  item: SheetItemView;
+  /** Membros da família, para a troca de pagador (§4.6) — vazio no pessoal. */
+  members: { userId: string; name: string }[];
+}) {
   const [actualState, actualFormAction, actualPending] = useActionState(
     setItemActualValueAction,
     initialState,
@@ -49,12 +64,20 @@ export function ItemActions({ item }: { item: SheetItemView }) {
     deleteOneOffItemAction,
     initialState,
   );
+  const [payerState, payerFormAction, payerPending] = useActionState(
+    setItemPayerAction,
+    initialState,
+  );
 
   const effectiveCents = effectiveCentsFor(item);
   const isPaid = isItemPaid(item);
   const isCarried = item.carriedToItemId !== null;
   const isPending =
-    actualPending || paymentPending || carryPending || deletePending;
+    actualPending ||
+    paymentPending ||
+    carryPending ||
+    deletePending ||
+    payerPending;
 
   // Pagar e levar só enquanto o item está em aberto — levado já tem destino.
   const canSettle = !isPaid && !isCarried;
@@ -162,6 +185,48 @@ export function ItemActions({ item }: { item: SheetItemView }) {
               {paymentPending ? "Registrando..." : "Registrar pagamento"}
             </Button>
           </form>
+
+          {members.length > 0 ? (
+            <form action={payerFormAction} className="space-y-2">
+              <input type="hidden" name="itemId" value={item.id} />
+              <Label htmlFor={`payer-${item.id}`}>Paga por</Label>
+              <select
+                // A `key` remonta o select quando o pagador salvo muda: sem
+                // isso, ele ficaria exibindo o valor de antes (o React só
+                // aplica `defaultValue` na montagem, e o reset do formulário
+                // devolve o controle ao estado anterior).
+                key={item.payerUserId ?? "sem-pagador"}
+                id={`payer-${item.id}`}
+                name="payerUserId"
+                defaultValue={item.payerUserId ?? ""}
+                className={SELECT_CLASSES}
+                disabled={isPending}
+              >
+                {members.map((member) => (
+                  <option key={member.userId} value={member.userId}>
+                    {member.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-muted-foreground text-xs">
+                Vale só para este mês — a conta fixa continua com o pagador
+                dela.
+              </p>
+              {payerState.error ? (
+                <p role="alert" className="text-destructive text-sm">
+                  {payerState.error}
+                </p>
+              ) : null}
+              <Button
+                type="submit"
+                variant="outline"
+                size="sm"
+                disabled={isPending}
+              >
+                Salvar pagador
+              </Button>
+            </form>
+          ) : null}
 
           {canSettle || item.source === "one_off" ? (
             <div className="flex flex-wrap items-center gap-2 border-t pt-3">
