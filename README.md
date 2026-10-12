@@ -7,7 +7,7 @@ Sistema de finanças pessoais e da família para o Vinícius e a Isabelle — su
 - **Ordem de construção (fatias):** [`docs/ROADMAP.md`](docs/ROADMAP.md)
 - **Histórico detalhado do que foi feito e por quê:** [`docs/BUILD_LOG.md`](docs/BUILD_LOG.md)
 
-> **Estado atual:** **Fatias 1 a 4 concluídas** — login e família, contas e cartões, lançamento rápido e o cartão de crédito com parcelas e faturas (calculado × real × não lançado, com registro de pagamento). Os testes de isolamento rodam no CI a cada push; o deploy segue adiado. Próxima fatia: a **Folha do mês**.
+> **Estado atual:** **Fatias 1 a 5 concluídas** — login e família, contas e cartões, lançamento rápido, cartão de crédito com parcelas e faturas **e a Folha do mês** (o coração): ela gera sozinha a partir das contas fixas e das faturas, com valor real, pagamento, levar para o próximo mês, fechar/reabrir e o switch "incluir contas da família" — mais o CRUD das contas fixas. Os testes de isolamento rodam no CI a cada push; o deploy segue adiado. Próxima fatia: **Empréstimos e terceiros**.
 
 ## Stack
 
@@ -67,7 +67,9 @@ O `dev:local` troca apenas as variáveis de ambiente do processo — o `.env.loc
 |---|---|
 | `/login` · `/signup` | Entrada e cadastro (quem já está logado é levado direto para o app) |
 | `/onboarding` | Criar a família ou entrar com um código de convite |
-| `/` | Lista do mês — navegação entre meses, agrupamento por dia e total; a Folha do mês entra aqui na Fatia 5 |
+| `/` | Lista do mês — navegação entre meses, agrupamento por dia e total; e o **aviso de fechamento** quando a folha do mês anterior continua aberta |
+| `/folha` | A **Folha do mês**: itens gerados sozinhos (contas fixas + faturas), valor real, pagar/parcial, levar para o próximo mês, item pontual, fechar/reabrir e o switch "incluir contas da família" |
+| `/folha/fixas` | Contas fixas (água, luz, internet…): criar, editar, desativar/reativar e escolher quem paga (na família) |
 | `/contas` | Contas e cartões do escopo ativo (só seus ou da família) — criar, editar e apagar, com o limite do cartão digitado em reais e a **fatura aberta** de cada cartão |
 | `/contas/cartoes/[id]/fatura` | Fatura de um cartão: **calculado × valor real × não lançado**, histórico de parcelas e registro de pagamento (o total vira "paga", a menos fica parcial, 0,00 desfaz); as setas navegam os meses |
 | `/lancar` | Lançamento rápido — valor, no que foi, descrição opcional, categoria e forma de pagamento (Pix, dinheiro, débito, boleto ou **crédito no cartão, de 1x a 48x**) |
@@ -123,6 +125,7 @@ npx supabase migration new nome_da_migration
 | `20261009150000_categories_and_transactions.sql` | Categorias e lançamentos — escopo, RLS, `on delete restrict` para conta/cartão e categorias básicas por família |
 | `20261009170000_statements_and_installments.sql` | Faturas e parcelas — uma fatura por cartão e mês; a parcela liga lançamento e fatura do mesmo cartão |
 | `20261009190000_backfill_credit_installments.sql` | Cria faturas e parcelas para as compras no crédito que já existiam (idempotente) |
+| `20261010120000_month_sheets_and_templates.sql` | Folhas do mês, contas fixas e itens da folha — escopo, RLS, asserts (pagador membro) e os únicos que sustentam a geração idempotente |
 
 ### Testar o banco localmente (opcional, recomendado)
 
@@ -177,7 +180,7 @@ npm run db:cleanup -- --delete     # lista e apaga
 src/
 ├── app/                 Rotas (App Router)
 │   ├── (auth)/          Telas públicas: login e cadastro (o grupo não aparece na URL)
-│   ├── (app)/           Telas autenticadas: visão geral, família e conta
+│   ├── (app)/           Telas autenticadas: visão geral, folha (e fixas), contas, família e perfil
 │   ├── onboarding/      Criar/entrar na família (exige sessão, mas não família)
 │   ├── actions.ts       Server Actions compartilhadas (sair da conta)
 │   └── layout.tsx       Layout raiz + loading.tsx (limite de <Suspense>)

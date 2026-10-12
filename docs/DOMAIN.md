@@ -127,8 +127,8 @@ São necessárias porque uma policy em `household_members` que consultasse a pr�
 - Status é **calculado**, não digitado.
 
 ### 4.6 Totais e o switch da família
-- **Total a pagar pelo usuário U** na folha pessoal = soma de `effective` dos itens pessoais de U **+**, se o switch estiver ligado, soma de `effective` dos itens da família cujo `payer_user_id = U`.
-- Mostrar sempre: **total**, **já pago**, **falta pagar**.
+- **Total a pagar pelo usuário U** na folha pessoal = soma de `effective` dos itens pessoais de U **+**, se o switch estiver ligado, soma de `effective` dos itens da família cujo `payer_user_id = U`. Com o switch ligado, a folha **da família** do mês também é garantida (gerada) — senão não haveria o que somar.
+- Mostrar sempre: **total**, **já pago**, **falta pagar**. Item **levado** para o mês seguinte não conta no "falta pagar" do mês de origem (o que restou dele já está lá); e "tudo pago" exige todo item pago — levado não é pago.
 - A visão da família (sem switch) lista todos os itens da família com o pagador de cada um. Itens da família com pagador diferente de U **não** entram no total de U.
 - Não existe rateio percentual: o modelo é "quem paga".
 

@@ -1599,4 +1599,72 @@ done
 
 **O que ainda não existe (e onde entra):** a **Folha do mês** (Fatia 5) — que inclui um item de fatura por cartão, sincronizado com o `effective_cents` dela; o **saldo de contas** (Fatia 8) — que passa a debitar `paid_cents` da conta escolhida no pagamento.
 
+---
+
+## P25 — Fatia 5: Folha do mês (concluída)
+
+**Critério do `ROADMAP.md`:** *"o Vinícius fecha o mês de setembro real, no sistema, sem usar o caderno"* — o app está **pronto para o aceite**: o fluxo inteiro (gerar → valor real → pagar/parcial → levar → fechar → reabrir) foi dirigido no navegador de ponta a ponta, e o fechamento de setembro de verdade é o passo final do Vinícius, no projeto real, com o roteiro abaixo.
+
+**Fases (cada uma com commit e verificação própria):**
+
+| Fase | Commit | O quê |
+|---|---|---|
+| 1 — Banco | `44ac6e2` | `month_sheets`, `recurring_templates`, `sheet_items` — escopo, RLS, asserts (pagador membro) e os únicos que sustentam a geração idempotente |
+| 2 — Regras puras | `c0b1848` | dia útil e data de fechamento, status calculado, totais, switch da família, sugestão pelo mês anterior |
+| 3 — Dados (abrir/gerar/ler) | `449dd6f` | `openSheet` idempotente (congela a data de fechamento; top-up por modelo e por fatura com valor) e `listSheet` |
+| 4 — Dados (mutações) | `5e0520a` | valor real, pagamento, levar, pontual, fechar/reabrir — com a delegação para a fatura (D38) |
+| 5 — Tela (leitura) | `5ec2e99` | `/folha` (aba nova): totais, grupos, chips, "Ver fatura", switch da família e o aviso de fechamento na tela inicial |
+| 6 — Tela (ações) | `fe5b5e7` | "Pagar tudo" num toque, "Ajustar" (valor real, valor pago, levar, apagar pontual) e fechar/reabrir em dois toques |
+| 7 — Contas fixas | `8e14a2b` | `/folha/fixas`: CRUD dos modelos (mensal/anual, pagador, categoria, desativar/reativar) e troca de pagador no item da família |
+| 8 — Fechamento | `P25` | este registro + README + DOMAIN §4.6 + bateria |
+
+**Decisões (D36–D43):**
+
+| # | Decisão | Por quê |
+|---|---|---|
+| D36 | A folha mora em `/folha` (aba própria); a tela inicial ganha só o **aviso de fechamento** | O caderno é uma tela; a lista do dia a dia continua em `/` |
+| D37 | Item de modelo ou de fatura **não se apaga** — só pontual; o caminho é editar o valor ou levar | O que o cadastro/geração criou representa conta de verdade; o retrato do mês fica |
+| D38 | Item de fatura é **espelho**: valor e pagamento vivem no `statement` | Pagar/informar na folha reflete na tela da fatura, e vice-versa — uma fonte só, sem número divergente |
+| D39 | Levar não colide com a geração: a cópia do modelo vira **pontual sem vínculo**; a da fatura **mantém** o vínculo | Senão o mês seguinte confundiria a cópia com a conta dele — e a fatura continua sendo a mesma |
+| D40 | Geração idempotente: só com a folha aberta, um item por (folha, modelo) e (folha, fatura); nada regenera por cima | Abrir de novo não duplica; fechar congela o que existe |
+| D41 | `closed` é coluna da folha; fechar exige todo item pago **ou levado**; reabrir pede confirmação; item da família exige pagador (padrão: quem cria) | O fechamento é um ato; depois dele a folha fica somente leitura NA FOLHA (a fatura mantém a vida própria) |
+| D42 | "Falta pagar" **ignora item levado**; "Tudo pago! Obrigado Deus!" exige **todos** pagos | O que restou do levado já está no mês seguinte — não pode faltar duas vezes; e levado não é pago |
+| D43 | O switch "incluir contas da família" ligado também **garante** a folha da família do mês | Sem a folha da família gerada, não haveria o que somar |
+
+**Lições registradas:**
+
+- **O navegador pegou dois bugs de React que teste unitário nenhum pegaria** — ambos da mesma família: o React não avisa sobre mutação de DOM que ele mesmo não fez.
+  - No botão de **dois toques**, o React reaproveita o mesmo nó `<button>` entre os estágios e o muta para `type="submit"` **no meio do próprio clique** — a default action daquele clique submetia: "apagar", "levar" e "fechar" executavam com um toque só. Corrigido com `key` por estágio; provado com listener de `submit` no DOM.
+  - O `<select>` de pagador com `defaultValue` **não acompanhava** o valor salvo (e o reset automático do formulário devolvia o controle ao estado anterior): corrigido com `key` pelo valor.
+- O `fetch` dos Server Components **memoiza GETs idênticos no mesmo render**: "abrir a folha" grava e lê com a mesma URL, e a primeira visita mostrava "Esta folha não existe mais". Opt-out documentado (`AbortSignal`) no cliente do servidor — vale para qualquer fluxo "grava e lê" no mesmo request.
+- O lint novo do React Compiler barra `setState` síncrono em efeito; o formulário pontual usa o padrão "ajustar estado durante o render".
+
+**Pendências do projeto:** deploy adiado (como combinado); o aviso de fechamento só aparece quando o mês exibido na tela inicial é o atual; a mensagem de erro do "Fechar o mês" fica na tela depois que a pendência é resolvida (some na próxima ação); pagamento ainda sem conta de origem (entra com o saldo — Fatia 8); feriados nacionais no dia útil são ajuste manual (fase 2 do roadmap); validar o dia do fechamento dos cartões com compras reais (§4.1).
+
+**Aceite — fechar setembro real, sem o caderno:**
+
+1. `npm run dev` (projeto real) e entrar.
+2. `/folha/fixas` → cadastrar as contas fixas que o caderno tem (água, luz, internet, condomínio…), com pagador nas da família.
+3. Abrir `/folha?mes=2026-09` → conferir os itens gerados (fixas + faturas de setembro com valor), informar os valores reais, marcar os pagos e levar o que ficou para outubro.
+4. "Fechar a folha" — e o aviso na tela inicial some.
+
+---
+
+## Resumo da Fatia 5 — concluída (fases 1 a 8)
+
+| Fase | Situação |
+|---|---|
+| 1 — Banco | ✅ `month_sheets` (uma por escopo e mês), `recurring_templates` (mensal/anual, uso normal desativa) e `sheet_items` (retrato, únicos que sustentam a geração) |
+| 2 — Regras puras | ✅ 5º dia útil (continua no mês seguinte se faltar), status calculado, totais, switch da família, sugestão pelo mês anterior |
+| 3 — Gerar ao abrir | ✅ abrir a folha cria os itens (modelos + faturas com valor) sem duplicar; fechar congela |
+| 4 — Ações no servidor | ✅ valor real, pagar, levar (leva só o que falta), pontual, fechar exige pago-ou-levado, reabrir |
+| 5 — Tela da folha | ✅ totais, grupos Faturas/Fixas/Pontuais, chips (Paga/Parcial/Atrasada/Pendente/Levada), "Ver fatura", switch da família e aviso de fechamento na inicial |
+| 6 — Ações na tela | ✅ "Pagar tudo" num toque, "Ajustar" com valor real/pago/levar/apagar e fechar/reabrir em dois toques |
+| 7 — Contas fixas | ✅ `/folha/fixas` com criar/editar/desativar e a troca de pagador no item da família |
+| 8 — Fechamento | ✅ este registro + README + bateria; aceite = fechar setembro real (roteiro no P25) |
+
+**Números:** 133 testes unitários · 66 de isolamento · 24 rotas · 0 erros de lint, tipo, teste ou build.
+
+**O que ainda não existe (e onde entra):** **empréstimos e terceiros** ("de quem é", conta corrente por pessoa, cruzamento na fatura — Fatia 6); **reserva do casal** (Fatia 7); **saldo de contas** (Fatia 8) — que passa a debitar o pagamento da fatura e das contas; alertas de vencimento e feriados (Fatia 9 / fase 2).
+
 
