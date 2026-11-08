@@ -189,6 +189,58 @@ isOneToOne: false
       referencedColumns: ["id"]
     }
                   ]
+                },"people": {
+                  Row: {
+                    "created_at": string,"created_by": string | null,"id": string,"name": string,"owner_user_id": string,"relationship": string | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "created_at"?: string,"created_by"?: string | null,"id"?: string,"name": string,"owner_user_id": string,"relationship"?: string | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "created_at"?: string,"created_by"?: string | null,"id"?: string,"name"?: string,"owner_user_id"?: string,"relationship"?: string | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    
+                  ]
+                },"person_ledger_entries": {
+                  Row: {
+                    "amount_cents": number,"created_at": string,"created_by": string | null,"entry_date": string,"id": string,"kind": string,"notes": string | null,"person_id": string,"received_into_account_id": string | null,"source_installment_id": string | null,"source_transaction_id": string | null,"updated_at": string
+                  }
+                  ComputedFields: never
+                  Insert: {
+                    "amount_cents": number,"created_at"?: string,"created_by"?: string | null,"entry_date": string,"id"?: string,"kind": string,"notes"?: string | null,"person_id": string,"received_into_account_id"?: string | null,"source_installment_id"?: string | null,"source_transaction_id"?: string | null,"updated_at"?: string
+                  }
+                  Update: {
+                    "amount_cents"?: number,"created_at"?: string,"created_by"?: string | null,"entry_date"?: string,"id"?: string,"kind"?: string,"notes"?: string | null,"person_id"?: string,"received_into_account_id"?: string | null,"source_installment_id"?: string | null,"source_transaction_id"?: string | null,"updated_at"?: string
+                  }
+                  Relationships: [
+                    {
+      foreignKeyName: "person_ledger_entries_person_id_fkey"
+      columns: ["person_id"]
+isOneToOne: false
+      referencedRelation: "people"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "person_ledger_entries_received_into_account_id_fkey"
+      columns: ["received_into_account_id"]
+isOneToOne: false
+      referencedRelation: "accounts"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "person_ledger_entries_source_installment_id_fkey"
+      columns: ["source_installment_id"]
+isOneToOne: false
+      referencedRelation: "card_installments"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "person_ledger_entries_source_transaction_id_fkey"
+      columns: ["source_transaction_id"]
+isOneToOne: false
+      referencedRelation: "transactions"
+      referencedColumns: ["id"]
+    }
+                  ]
                 },"profiles": {
                   Row: {
                     "created_at": string,"created_by": string,"email": string,"id": string,"name": string,"updated_at": string
@@ -313,14 +365,14 @@ isOneToOne: false
                   ]
                 },"transactions": {
                   Row: {
-                    "account_id": string | null,"card_id": string | null,"category_id": string | null,"created_at": string,"created_by": string | null,"description": string,"household_id": string | null,"id": string,"installments_count": number,"notes": string | null,"occurred_on": string,"owner_user_id": string | null,"payment_method": string,"scope": string,"total_cents": number,"updated_at": string
+                    "account_id": string | null,"card_id": string | null,"category_id": string | null,"created_at": string,"created_by": string | null,"description": string,"household_id": string | null,"id": string,"installments_count": number,"notes": string | null,"occurred_on": string,"on_behalf_of_person_id": string | null,"owner_user_id": string | null,"payment_method": string,"scope": string,"total_cents": number,"updated_at": string
                   }
                   ComputedFields: never
                   Insert: {
-                    "account_id"?: string | null,"card_id"?: string | null,"category_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description": string,"household_id"?: string | null,"id"?: string,"installments_count"?: number,"notes"?: string | null,"occurred_on": string,"owner_user_id"?: string | null,"payment_method": string,"scope"?: string,"total_cents": number,"updated_at"?: string
+                    "account_id"?: string | null,"card_id"?: string | null,"category_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description": string,"household_id"?: string | null,"id"?: string,"installments_count"?: number,"notes"?: string | null,"occurred_on": string,"on_behalf_of_person_id"?: string | null,"owner_user_id"?: string | null,"payment_method": string,"scope"?: string,"total_cents": number,"updated_at"?: string
                   }
                   Update: {
-                    "account_id"?: string | null,"card_id"?: string | null,"category_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string,"household_id"?: string | null,"id"?: string,"installments_count"?: number,"notes"?: string | null,"occurred_on"?: string,"owner_user_id"?: string | null,"payment_method"?: string,"scope"?: string,"total_cents"?: number,"updated_at"?: string
+                    "account_id"?: string | null,"card_id"?: string | null,"category_id"?: string | null,"created_at"?: string,"created_by"?: string | null,"description"?: string,"household_id"?: string | null,"id"?: string,"installments_count"?: number,"notes"?: string | null,"occurred_on"?: string,"on_behalf_of_person_id"?: string | null,"owner_user_id"?: string | null,"payment_method"?: string,"scope"?: string,"total_cents"?: number,"updated_at"?: string
                   }
                   Relationships: [
                     {
@@ -346,6 +398,12 @@ isOneToOne: false
       columns: ["household_id"]
 isOneToOne: false
       referencedRelation: "households"
+      referencedColumns: ["id"]
+    },{
+      foreignKeyName: "transactions_on_behalf_of_person_id_fkey"
+      columns: ["on_behalf_of_person_id"]
+isOneToOne: false
+      referencedRelation: "people"
       referencedColumns: ["id"]
     }
                   ]
